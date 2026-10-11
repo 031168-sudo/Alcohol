@@ -13,8 +13,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material3.Surface
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
@@ -59,11 +60,13 @@ fun FormDialog(
     text: @Composable () -> Unit,
     confirmButton: @Composable () -> Unit,
     dismissButton: (@Composable () -> Unit)? = null,
+    /** Ошибка для показа над кнопками, всегда видна даже при открытой клавиатуре. */
+    message: String? = null,
 ) {
     val host = LocalFormHost.current
     val token = remember { Any() }
     val content: @Composable () -> Unit = {
-        FormPage(onDismissRequest, title, text, confirmButton, dismissButton)
+        FormPage(onDismissRequest, title, text, confirmButton, dismissButton, message)
     }
     if (host != null) {
         SideEffect { host.upsert(token, content) }
@@ -80,6 +83,7 @@ private fun FormPage(
     text: @Composable () -> Unit,
     confirmButton: @Composable () -> Unit,
     dismissButton: (@Composable () -> Unit)?,
+    message: String?,
 ) {
     BackHandler(onBack = onDismissRequest)
     Surface(
@@ -99,6 +103,14 @@ private fun FormPage(
                 text()
             }
             Spacer(Modifier.height(12.dp))
+            message?.let {
+                Text(
+                    it,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(8.dp))
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,

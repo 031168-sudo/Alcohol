@@ -321,6 +321,7 @@ private fun PurchaseDialog(warehouse: Warehouse, existing: Purchase? = null, onD
 
     FormDialog(
         onDismissRequest = onDismiss,
+        message = error,
         title = { Text(if (existing == null) "Новая закупка" else "Изменить закупку") },
         text = {
             Column(
@@ -406,7 +407,6 @@ private fun PurchaseDialog(warehouse: Warehouse, existing: Purchase? = null, onD
                     value = dateText,
                     onValueChange = { dateText = it },
                 )
-                error?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             }
         },
         confirmButton = {
@@ -436,8 +436,8 @@ private fun PurchaseDialog(warehouse: Warehouse, existing: Purchase? = null, onD
                                 )
                             }
                             onDismiss()
-                        } catch (e: IllegalArgumentException) {
-                            error = e.message
+                        } catch (e: Exception) {
+                            error = e.message ?: "Не удалось сохранить: ${e::class.java.simpleName}"
                         }
                     }
                 }

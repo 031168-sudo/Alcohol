@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -17,6 +20,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -118,6 +123,9 @@ fun StockScreen() {
     }
 }
 
+/** Единицы измерения для склада. Выбираются из списка. */
+private val stockUnits = listOf("г", "кг", "мл", "л", "шт.")
+
 /** Закупки одной позиции склада: можно изменить или удалить каждую. */
 @Composable
 private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -> Unit) {
@@ -150,9 +158,11 @@ private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -
                             "Осталось %.1f %s".format(purchase.remaining, row.unit),
                             style = MaterialTheme.typography.bodySmall,
                         )
-                        Row {
-                            TextButton(onClick = { editing = purchase }) { Text("Изменить") }
-                            TextButton(onClick = {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            IconButton(onClick = { editing = purchase }) {
+                                Icon(Icons.Default.Edit, contentDescription = "Изменить закупку")
+                            }
+                            IconButton(onClick = {
                                 scope.launch {
                                     message = if (warehouse.deletePurchase(purchase.id)) {
                                         null
@@ -160,7 +170,9 @@ private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -
                                         "Из этой закупки уже списано в варку, удалить нельзя"
                                     }
                                 }
-                            }) { Text("Удалить") }
+                            }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Удалить закупку")
+                            }
                         }
                     }
                 }
@@ -188,6 +200,7 @@ private fun PurchaseDialog(warehouse: Warehouse, existing: Purchase? = null, onD
     var name by remember { mutableStateOf("") }
     var categoryId by remember { mutableStateOf<Long?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
+    var unitMenuOpen by remember { mutableStateOf(false) }
     var unit by remember { mutableStateOf("г") }
     var quantityText by remember { mutableStateOf(existing?.quantity?.toString() ?: "") }
     var priceText by remember { mutableStateOf(existing?.totalPrice?.toString() ?: "") }
@@ -229,12 +242,20 @@ private fun PurchaseDialog(warehouse: Warehouse, existing: Purchase? = null, onD
                             }
                         }
                     }
-                    OutlinedTextField(
-                        value = unit,
-                        onValueChange = { unit = it },
-                        label = { Text("Единица (г, мл, шт.)") },
-                        singleLine = true,
-                    )
+                    Column {
+                        OutlinedButton(onClick = { unitMenuOpen = true }) { Text("Единица: $unit") }
+                        DropdownMenu(expanded = unitMenuOpen, onDismissRequest = { unitMenuOpen = false }) {
+                            stockUnits.forEach { u ->
+                                DropdownMenuItem(
+                                    text = { Text(u) },
+                                    onClick = {
+                                        unit = u
+                                        unitMenuOpen = false
+                                    },
+                                )
+                            }
+                        }
+                    }
                 }
                 OutlinedTextField(
                     value = quantityText,
@@ -248,11 +269,10 @@ private fun PurchaseDialog(warehouse: Warehouse, existing: Purchase? = null, onD
                     label = { Text("Сумма покупки, ₽") },
                     singleLine = true,
                 )
-                OutlinedTextField(
+                DateField(
+                    label = "Дата закупки (дд.мм.гггг)",
                     value = dateText,
                     onValueChange = { dateText = it },
-                    label = { Text("Дата закупки (дд.мм.гггг)") },
-                    singleLine = true,
                 )
                 error?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             }
@@ -342,17 +362,17 @@ private fun CategoriesDialog(warehouse: Warehouse, onDismiss: () -> Unit) {
                             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                         ) {
                             Text(category.name, modifier = Modifier.weight(1f))
-                            TextButton(onClick = {
+                            IconButton(onClick = {
                                 editingId = category.id
                                 editText = category.name
-                            }) { Text("Изменить") }
-                            TextButton(onClick = {
+                            }) { Icon(Icons.Default.Edit, contentDescription = "Переименовать") }
+                            IconButton(onClick = {
                                 scope.launch {
                                     val ok = warehouse.deleteCategory(category.id)
                                     message = if (ok) null
                                     else "В «${category.name}» есть ингредиенты. Сначала перенеси их."
                                 }
-                            }) { Text("Удалить") }
+                            }) { Icon(Icons.Default.Delete, contentDescription = "Удалить категорию") }
                         }
                     }
                 }

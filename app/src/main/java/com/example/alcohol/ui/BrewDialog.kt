@@ -66,11 +66,10 @@ fun BrewDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                OutlinedTextField(
+                DateField(
+                    label = "Дата варки (дд.мм.гггг)",
                     value = dateText,
                     onValueChange = { dateText = it },
-                    label = { Text("Дата варки (дд.мм.гггг)") },
-                    singleLine = true,
                 )
                 OutlinedTextField(
                     value = volumeText,

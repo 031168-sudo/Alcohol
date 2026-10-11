@@ -140,11 +140,17 @@ private fun YearCard(
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
-                    IconButton(onClick = { onEdit(total) }) {
-                        Icon(Icons.Default.Edit, contentDescription = "Изменить итог")
-                    }
-                    IconButton(onClick = { onDelete(total.id) }) {
-                        Icon(Icons.Default.Delete, contentDescription = "Удалить итог")
+                    // Карандаш и корзина стоят друг над другом в одном столбике справа, не сдвигая текст.
+                    Column(
+                        modifier = Modifier.width(48.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        IconButton(onClick = { onEdit(total) }) {
+                            Icon(Icons.Default.Edit, contentDescription = "Изменить итог")
+                        }
+                        IconButton(onClick = { onDelete(total.id) }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Удалить итог")
+                        }
                     }
                 }
             }

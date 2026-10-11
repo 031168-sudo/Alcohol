@@ -17,7 +17,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.example.alcohol.data.DrinkType
-import com.example.alcohol.ui.RecipeCostScreen
+import com.example.alcohol.ui.BatchListScreen
+import com.example.alcohol.ui.StockScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -25,25 +26,22 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    DrinkTabs()
+                    MainTabs()
                 }
             }
         }
     }
 }
 
-private val drinkTabs = listOf(
-    "Пиво" to DrinkType.BEER,
-    "Сидр" to DrinkType.CIDER,
-)
+private val tabs = listOf("Пиво", "Сидр", "Склад")
 
 @Composable
-fun DrinkTabs() {
+fun MainTabs() {
     var selected by remember { mutableIntStateOf(0) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         TabRow(selectedTabIndex = selected) {
-            drinkTabs.forEachIndexed { index, (title, _) ->
+            tabs.forEachIndexed { index, title ->
                 Tab(
                     selected = selected == index,
                     onClick = { selected = index },
@@ -51,7 +49,10 @@ fun DrinkTabs() {
                 )
             }
         }
-        // Пока показываем только себестоимость. Экраны партий и напоминаний добавим позже.
-        RecipeCostScreen(drinkType = drinkTabs[selected].second)
+        when (selected) {
+            0 -> BatchListScreen(drinkType = DrinkType.BEER)
+            1 -> BatchListScreen(drinkType = DrinkType.CIDER)
+            else -> StockScreen()
+        }
     }
 }

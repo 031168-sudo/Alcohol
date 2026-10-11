@@ -9,9 +9,9 @@ class CostCalculatorTest {
     @Test
     fun totalAndPerLiterAreComputed() {
         val lines = listOf(
-            CostLine(recipeId = 1, amount = 3000.0, kind = IngredientKind.MALT, pricePerUnit = 0.2),   // 600
-            CostLine(recipeId = 1, amount = 27.0, kind = IngredientKind.HOP, pricePerUnit = 1.5),      // 40.5
-            CostLine(recipeId = 1, amount = 1.0, kind = IngredientKind.YEAST, pricePerUnit = 150.0),   // 150
+            CostLine(kind = IngredientKind.MALT, cost = 600.0),
+            CostLine(kind = IngredientKind.HOP, cost = 40.5),
+            CostLine(kind = IngredientKind.YEAST, cost = 150.0),
         )
 
         val result = CostCalculator.calculate(lines, batchVolumeL = 13.0)
@@ -22,7 +22,7 @@ class CostCalculatorTest {
     }
 
     @Test
-    fun emptyRecipeCostsNothing() {
+    fun emptyBatchCostsNothing() {
         val result = CostCalculator.calculate(emptyList(), batchVolumeL = 10.0)
         assertEquals(0.0, result.total, 1e-9)
         assertEquals(0.0, result.perLiter, 1e-9)

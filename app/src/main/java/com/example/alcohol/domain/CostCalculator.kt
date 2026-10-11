@@ -2,14 +2,11 @@ package com.example.alcohol.domain
 
 import com.example.alcohol.data.IngredientKind
 
-/** Одна строка рецепта с ценой ингредиента, достаточная для расчёта. */
+/** Одна списанная позиция партии: вид ингредиента и её стоимость. */
 data class CostLine(
-    val recipeId: Long,
-    /** Количество в единицах ингредиента (г, мл, шт.). */
-    val amount: Double,
     val kind: IngredientKind,
-    /** Цена за одну единицу, в рублях. */
-    val pricePerUnit: Double,
+    /** Стоимость списанного, в рублях. */
+    val cost: Double,
 )
 
 data class CostBreakdown(
@@ -28,7 +25,7 @@ object CostCalculator {
 
         val byKind = lines
             .groupBy { it.kind }
-            .mapValues { (_, items) -> items.sumOf { it.amount * it.pricePerUnit } }
+            .mapValues { (_, items) -> items.sumOf { it.cost } }
         val total = byKind.values.sum()
 
         return CostBreakdown(

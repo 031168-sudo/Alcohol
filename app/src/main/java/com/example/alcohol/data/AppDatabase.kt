@@ -28,7 +28,15 @@ class Converters {
 }
 
 @Database(
-    entities = [Ingredient::class, Recipe::class, RecipeItem::class, Batch::class, BatchStage::class],
+    entities = [
+        Ingredient::class,
+        Purchase::class,
+        Recipe::class,
+        RecipeItem::class,
+        Batch::class,
+        BatchIngredient::class,
+        BatchStage::class,
+    ],
     version = 1,
     exportSchema = false,
 )
@@ -36,6 +44,8 @@ class Converters {
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun recipeDao(): RecipeDao
+    abstract fun stockDao(): StockDao
+    abstract fun batchDao(): BatchDao
 
     companion object {
         @Volatile
@@ -48,8 +58,9 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "alcohol.db",
                 )
-                    // Версию схемы поднимаем при любом изменении таблиц и пишем миграцию.
-                    // Без неё Room не откроет старую базу, и данные не пропадут молча.
+                    // Пока версия 1: приложение ещё не ставилось на телефон, схему можно менять.
+                    // После первой установки любое изменение таблиц требует новой версии и миграции,
+                    // иначе Room не откроет базу, а данные пользователя могут пропасть.
                     .build()
                     .also { instance = it }
             }

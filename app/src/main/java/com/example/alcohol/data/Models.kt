@@ -2,14 +2,16 @@ package com.example.alcohol.data
 
 import androidx.room.Entity
 import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 enum class DrinkType { BEER, CIDER }
 
-enum class IngredientKind { MALT, HOP, YEAST, ADJUNCT, PACKAGING, OTHER }
+enum class IngredientKind { MALT, HOP, YEAST, ADJUNCT, SUGAR, PACKAGING, OTHER }
 
 enum class StageType { MASHING, BOIL, COOLING, PRIMARY, RACKING, SECONDARY, CONDITIONING, BOTTLING, KEGGING }
 
+/** Что есть на складе: вид, единица измерения. Цена и остатки живут в закупках. */
 @Entity(tableName = "ingredients")
 data class Ingredient(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -17,10 +19,33 @@ data class Ingredient(
     val kind: IngredientKind,
     /** Единица измерения: г, мл, шт. */
     val unit: String,
-    /** Цена за одну единицу, в рублях. */
-    val pricePerUnit: Double,
     /** Альфа-кислоты в процентах, только для хмеля. */
     val alphaAcid: Double? = null,
+)
+
+/**
+ * Закупка (партия на складе). Остаток уменьшается, когда ингредиент уходит в варку.
+ * Цена за единицу = totalPrice / quantity, она фиксируется на момент закупки.
+ */
+@Entity(
+    tableName = "purchases",
+    foreignKeys = [
+        ForeignKey(entity = Ingredient::class, parentColumns = ["id"], childColumns = ["ingredientId"]),
+    ],
+    indices = [Index("ingredientId")],
+)
+data class Purchase(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val ingredientId: Long,
+    /** Дата закупки, эпоха в миллисекундах. */
+    val purchasedAt: Long,
+    /** Купленное количество в единицах ингредиента. */
+    val quantity: Double,
+    /** Сумма покупки, в рублях. */
+    val totalPrice: Double,
+    /** Сколько осталось на складе. */
+    val remaining: Double,
+    val note: String = "",
 )
 
 @Entity(tableName = "recipes")
@@ -33,6 +58,7 @@ data class Recipe(
     val notes: String = "",
 )
 
+/** Состав рецепта: сколько ингредиента нужно на одну партию. Это шаблон, фактическая варка может отличаться. */
 @Entity(
     tableName = "recipe_items",
     primaryKeys = ["recipeId", "ingredientId"],
@@ -55,6 +81,7 @@ data class RecipeItem(
     foreignKeys = [
         ForeignKey(entity = Recipe::class, parentColumns = ["id"], childColumns = ["recipeId"]),
     ],
+    indices = [Index("recipeId")],
 )
 data class Batch(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -68,11 +95,36 @@ data class Batch(
     val notes: String = "",
 )
 
+/**
+ * Что реально списано со склада в конкретную партию.
+ * Стоимость партии = сумма cost по всем строкам, цена берётся из конкретной закупки (FIFO).
+ */
+@Entity(
+    tableName = "batch_ingredients",
+    foreignKeys = [
+        ForeignKey(entity = Batch::class, parentColumns = ["id"], childColumns = ["batchId"], onDelete = ForeignKey.CASCADE),
+        ForeignKey(entity = Purchase::class, parentColumns = ["id"], childColumns = ["purchaseId"]),
+        ForeignKey(entity = Ingredient::class, parentColumns = ["id"], childColumns = ["ingredientId"]),
+    ],
+    indices = [Index("batchId"), Index("purchaseId"), Index("ingredientId")],
+)
+data class BatchIngredient(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val batchId: Long,
+    val purchaseId: Long,
+    val ingredientId: Long,
+    /** Списано, в единицах ингредиента. */
+    val amount: Double,
+    /** Стоимость списанного, в рублях. */
+    val cost: Double,
+)
+
 @Entity(
     tableName = "batch_stages",
     foreignKeys = [
         ForeignKey(entity = Batch::class, parentColumns = ["id"], childColumns = ["batchId"], onDelete = ForeignKey.CASCADE),
     ],
+    indices = [Index("batchId")],
 )
 data class BatchStage(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

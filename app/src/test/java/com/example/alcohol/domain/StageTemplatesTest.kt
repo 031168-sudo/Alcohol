@@ -30,6 +30,11 @@ class StageTemplatesTest {
     }
 
     @Test
+    fun replanOfStageNotInTemplateChangesNothing() {
+        assertEquals(emptyMap<StageType, Long>(), StageTemplates.replan(DrinkType.BEER, StageType.RACKING, start))
+    }
+
+    @Test
     fun ciderPlanIsUnchanged() {
         val plan = StageTemplates.plan(DrinkType.CIDER, start)
 

@@ -46,8 +46,9 @@ object StageTemplates {
      */
     fun replan(drinkType: DrinkType, completed: StageType, completedAt: Long): Map<StageType, Long> {
         val all = steps(drinkType)
+        // Этапа нет в текущем шаблоне (например, старые этапы пива): пересчитывать нечего.
         val index = all.indexOfFirst { it.type == completed }
-        require(index >= 0) { "Этапа $completed нет в шаблоне ${drinkType.name}" }
+        if (index < 0) return emptyMap()
 
         var cursor = completedAt
         val result = mutableMapOf<StageType, Long>()

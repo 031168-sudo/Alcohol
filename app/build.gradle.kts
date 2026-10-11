@@ -24,8 +24,9 @@ android {
         minSdk = 26
         targetSdk = 35
         // Растёт на каждую новую версию. Установка поверх работает только при большем значении.
-        versionCode = 2
-        versionName = "0.2.0"
+        // CI передаёт номер сборки: каждая новая сборка выше предыдущей, поэтому обновление встаёт поверх.
+        versionCode = (project.findProperty("versionCode") as String?)?.toInt() ?: 2
+        versionName = (project.findProperty("versionName") as String?) ?: "0.2.0"
     }
 
     signingConfigs {

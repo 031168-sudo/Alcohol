@@ -50,3 +50,18 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
         db.execSQL("ALTER TABLE ingredients_new RENAME TO ingredients")
     }
 }
+
+/** Итоги за год, введённые вручную. */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `year_totals` (" +
+                "`id` INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, " +
+                "`year` INTEGER NOT NULL, " +
+                "`name` TEXT NOT NULL, " +
+                "`quantity` REAL NOT NULL, " +
+                "`unit` TEXT NOT NULL, " +
+                "`totalCost` REAL NOT NULL)"
+        )
+    }
+}

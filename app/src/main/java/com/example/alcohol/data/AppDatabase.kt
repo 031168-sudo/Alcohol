@@ -32,8 +32,9 @@ class Converters {
         Batch::class,
         BatchIngredient::class,
         BatchStage::class,
+        YearTotal::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -43,6 +44,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun stockDao(): StockDao
     abstract fun categoryDao(): CategoryDao
     abstract fun batchDao(): BatchDao
+    abstract fun yearTotalDao(): YearTotalDao
 
     companion object {
         @Volatile
@@ -57,7 +59,7 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                     // При любом изменении таблиц поднимаем версию и добавляем миграцию.
                     // Без миграции Room не откроет базу, но данные при этом не теряются.
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .addCallback(object : RoomDatabase.Callback() {
                         override fun onCreate(db: SupportSQLiteDatabase) {
                             db.execSQL(Categories.SEED_SQL)

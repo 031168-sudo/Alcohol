@@ -26,6 +26,7 @@ class Warehouse(private val db: AppDatabase) {
     private val stockDao = db.stockDao()
     private val categoryDao = db.categoryDao()
     private val batchDao = db.batchDao()
+    private val yearTotalDao = db.yearTotalDao()
     private val recipeDao = db.recipeDao()
 
     fun stock(): Flow<List<StockRow>> = stockDao.stock()
@@ -69,6 +70,24 @@ class Warehouse(private val db: AppDatabase) {
     suspend fun recipeItems(recipeId: Long): List<RecipeItem> = recipeDao.items(recipeId)
 
     fun batches(type: DrinkType): Flow<List<BatchSummary>> = batchDao.summaries(type)
+
+    fun yearTotals(): Flow<List<YearTotal>> = yearTotalDao.all()
+
+    /** Добавляет итог за год. Себестоимость за единицу потом считается как сумма / количество. */
+    suspend fun addYearTotal(year: Int, name: String, quantity: Double, unit: String, totalCost: Double) {
+        val cleanName = name.trim()
+        val cleanUnit = unit.trim()
+        require(cleanName.isNotEmpty()) { "Укажи название" }
+        require(cleanUnit.isNotEmpty()) { "Укажи единицу измерения" }
+        require(quantity > 0) { "Количество должно быть больше нуля" }
+        require(totalCost >= 0) { "Сумма не может быть отрицательной" }
+        require(year in 2000..2100) { "Проверь год" }
+        yearTotalDao.insert(
+            YearTotal(year = year, name = cleanName, quantity = quantity, unit = cleanUnit, totalCost = totalCost)
+        )
+    }
+
+    suspend fun deleteYearTotal(id: Long) = yearTotalDao.delete(id)
 
     fun batch(batchId: Long): Flow<Batch?> = batchDao.batch(batchId)
 

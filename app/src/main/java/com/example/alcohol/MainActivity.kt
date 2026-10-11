@@ -37,6 +37,7 @@ import com.example.alcohol.ui.DrinkScreen
 import com.example.alcohol.ui.FormHost
 import com.example.alcohol.ui.LocalFormHost
 import com.example.alcohol.ui.StockScreen
+import com.example.alcohol.ui.TotalsScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -78,7 +79,7 @@ private fun NotificationPermission() {
     }
 }
 
-private val tabs = listOf("Пиво", "Сидр", "Склад")
+private val tabs = listOf("Пиво", "Сидр", "Склад", "📊")
 
 @Composable
 fun MainTabs(modifier: Modifier = Modifier) {
@@ -97,7 +98,8 @@ fun MainTabs(modifier: Modifier = Modifier) {
         when (selected) {
             0 -> DrinkScreen(drinkType = DrinkType.BEER)
             1 -> DrinkScreen(drinkType = DrinkType.CIDER)
-            else -> StockScreen()
+            2 -> StockScreen()
+            else -> TotalsScreen()
         }
     }
 }

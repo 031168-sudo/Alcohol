@@ -20,6 +20,8 @@ data class YearTotal(
     val quantity: Double,
     val unit: String,
     val totalCost: Double,
+    /** Необязательная пиктограмма-эмодзи. Null, если не задана. */
+    val icon: String? = null,
 )
 
 @Dao

@@ -1,6 +1,8 @@
 package com.example.alcohol.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -114,12 +116,14 @@ private fun YearCard(
             DrinkTotalRow(emoji = BEER_EMOJI, title = "Пиво", batches = beer)
             DrinkTotalRow(emoji = CIDER_EMOJI, title = "Сидр", batches = cider)
             custom.forEach { total ->
-                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconSlot(total.icon.orEmpty())
+                    Spacer(Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(total.name, style = MaterialTheme.typography.titleSmall)
                         Text(
-                            "${"%.1f".format(total.quantity)} ${total.unit} · ${"%.0f".format(total.totalCost)} ₽ · " +
-                                "${"%.2f".format(total.totalCost / total.quantity)} ₽/${total.unit}",
+                            "${"%.1f".format(total.quantity)} ${total.unit} · всего ${"%.0f".format(total.totalCost)} ₽ · " +
+                                "в среднем ${"%.2f".format(total.totalCost / total.quantity)} ₽/${total.unit}",
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
@@ -136,8 +140,8 @@ private fun YearCard(
 /** Одна строка по напитку: сколько литров, сколько всего потрачено, средняя себестоимость литра. */
 @Composable
 private fun DrinkTotalRow(emoji: String, title: String, batches: List<BatchSummary>) {
-    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-        Text(emoji, fontSize = 32.sp)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        IconSlot(emoji)
         Spacer(Modifier.width(12.dp))
         Column {
             Text(title, style = MaterialTheme.typography.titleSmall)
@@ -156,10 +160,19 @@ private fun DrinkTotalRow(emoji: String, title: String, batches: List<BatchSumma
     }
 }
 
+/** Место под пиктограмму фиксированной ширины: даже если её нет, строки остаются ровными. */
+@Composable
+private fun IconSlot(emoji: String) {
+    Box(modifier = Modifier.width(48.dp), contentAlignment = Alignment.Center) {
+        Text(emoji, fontSize = 32.sp)
+    }
+}
+
 @Composable
 private fun AddYearTotalDialog(warehouse: Warehouse, year: Int, onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf("") }
+    var iconText by remember { mutableStateOf("") }
     var quantityText by remember { mutableStateOf("") }
     var unit by remember { mutableStateOf("шт.") }
     var costText by remember { mutableStateOf("") }
@@ -193,6 +206,12 @@ private fun AddYearTotalDialog(warehouse: Warehouse, year: Int, onDismiss: () ->
                     singleLine = true,
                 )
                 OutlinedTextField(
+                    value = iconText,
+                    onValueChange = { iconText = it },
+                    label = { Text("Пиктограмма, эмодзи (необязательно)") },
+                    singleLine = true,
+                )
+                OutlinedTextField(
                     value = costText,
                     onValueChange = { costText = it },
                     label = { Text("Себестоимость, ₽") },
@@ -211,7 +230,7 @@ private fun AddYearTotalDialog(warehouse: Warehouse, year: Int, onDismiss: () ->
                         error = null
                         scope.launch {
                             try {
-                                warehouse.addYearTotal(year, name, quantity, unit, cost)
+                                warehouse.addYearTotal(year, name, quantity, unit, cost, iconText)
                                 onDismiss()
                             } catch (e: IllegalArgumentException) {
                                 error = e.message ?: "Не удалось сохранить"

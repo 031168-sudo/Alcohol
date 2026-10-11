@@ -74,7 +74,7 @@ class Warehouse(private val db: AppDatabase) {
     fun yearTotals(): Flow<List<YearTotal>> = yearTotalDao.all()
 
     /** Добавляет итог за год. Себестоимость за единицу потом считается как сумма / количество. */
-    suspend fun addYearTotal(year: Int, name: String, quantity: Double, unit: String, totalCost: Double) {
+    suspend fun addYearTotal(year: Int, name: String, quantity: Double, unit: String, totalCost: Double, icon: String?) {
         val cleanName = name.trim()
         val cleanUnit = unit.trim()
         require(cleanName.isNotEmpty()) { "Укажи название" }
@@ -83,7 +83,14 @@ class Warehouse(private val db: AppDatabase) {
         require(totalCost >= 0) { "Сумма не может быть отрицательной" }
         require(year in 2000..2100) { "Проверь год" }
         yearTotalDao.insert(
-            YearTotal(year = year, name = cleanName, quantity = quantity, unit = cleanUnit, totalCost = totalCost)
+            YearTotal(
+                year = year,
+                name = cleanName,
+                quantity = quantity,
+                unit = cleanUnit,
+                totalCost = totalCost,
+                icon = icon?.trim()?.takeIf { it.isNotEmpty() },
+            )
         )
     }
 

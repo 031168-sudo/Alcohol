@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -37,6 +38,7 @@ import com.example.alcohol.ui.DrinkScreen
 import com.example.alcohol.ui.FormHost
 import com.example.alcohol.ui.LocalFormHost
 import com.example.alcohol.ui.StockScreen
+import com.example.alcohol.ui.TotalsChartIcon
 import com.example.alcohol.ui.TotalsScreen
 
 class MainActivity : ComponentActivity() {
@@ -79,7 +81,7 @@ private fun NotificationPermission() {
     }
 }
 
-private val tabs = listOf("Пиво", "Сидр", "Склад", "📊")
+private val tabs = listOf("Пиво", "Сидр", "Склад")
 
 @Composable
 fun MainTabs(modifier: Modifier = Modifier) {
@@ -94,6 +96,12 @@ fun MainTabs(modifier: Modifier = Modifier) {
                     text = { Text(title) },
                 )
             }
+            // Итоги — пиктограмма вместо текста, в цвет остальных вкладок.
+            Tab(
+                selected = selected == tabs.size,
+                onClick = { selected = tabs.size },
+                icon = { Icon(TotalsChartIcon, contentDescription = "Итоги") },
+            )
         }
         when (selected) {
             0 -> DrinkScreen(drinkType = DrinkType.BEER)

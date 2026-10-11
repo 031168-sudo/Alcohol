@@ -75,3 +75,10 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
         )
     }
 }
+
+/** У итогов появилась необязательная пиктограмма. */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `year_totals` ADD COLUMN `icon` TEXT")
+    }
+}

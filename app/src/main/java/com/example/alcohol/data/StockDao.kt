@@ -31,11 +31,21 @@ interface StockDao {
     )
     fun stock(): Flow<List<StockRow>>
 
-    @Query("SELECT * FROM ingredients WHERE name = :name LIMIT 1")
-    suspend fun findIngredientByName(name: String): Ingredient?
+    /** Позиция склада определяется парой «название + категория»: одинаковое название в другой категории — другая позиция. */
+    @Query("SELECT * FROM ingredients WHERE name = :name AND categoryId = :categoryId LIMIT 1")
+    suspend fun findIngredient(name: String, categoryId: Long): Ingredient?
 
     @Insert
     suspend fun insertIngredient(ingredient: Ingredient): Long
+
+    @Query("SELECT COUNT(*) FROM purchases WHERE ingredientId = :ingredientId")
+    suspend fun purchaseCountOf(ingredientId: Long): Int
+
+    @Query("SELECT COUNT(*) FROM recipe_items WHERE ingredientId = :ingredientId")
+    suspend fun recipeUsageOf(ingredientId: Long): Int
+
+    @Query("DELETE FROM ingredients WHERE id = :ingredientId")
+    suspend fun deleteIngredient(ingredientId: Long)
 
     @Insert
     suspend fun insertPurchase(purchase: Purchase): Long

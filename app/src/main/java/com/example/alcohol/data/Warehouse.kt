@@ -72,7 +72,7 @@ class Warehouse(private val db: AppDatabase) {
     fun stages(batchId: Long): Flow<List<BatchStage>> = batchDao.stages(batchId)
 
     /**
-     * Записывает закупку. Если ингредиента с таким именем ещё нет, создаёт его в выбранной категории.
+     * Записывает закупку. Позиция склада — это пара «название + категория»: если такой позиции ещё нет, она создаётся.
      * Цена за единицу = totalPrice / quantity.
      */
     suspend fun purchase(
@@ -89,7 +89,7 @@ class Warehouse(private val db: AppDatabase) {
         require(totalPrice >= 0) { "Цена не может быть отрицательной" }
 
         return db.withTransaction {
-            val ingredientId = stockDao.findIngredientByName(name.trim())?.id
+            val ingredientId = stockDao.findIngredient(name.trim(), categoryId)?.id
                 ?: stockDao.insertIngredient(
                     Ingredient(name = name.trim(), categoryId = categoryId, unit = unit.trim())
                 )
@@ -267,7 +267,13 @@ class Warehouse(private val db: AppDatabase) {
     /** Удаляет закупку. Возвращает false, если из неё уже что-то списано в варку. */
     suspend fun deletePurchase(id: Long): Boolean = db.withTransaction {
         if (stockDao.usageCount(id) > 0) return@withTransaction false
+        val purchase = stockDao.purchase(id) ?: return@withTransaction true
         stockDao.deletePurchase(id)
+        // Позиция без закупок и без рецептов больше не нужна: убираем её со склада.
+        val ingredientId = purchase.ingredientId
+        if (stockDao.purchaseCountOf(ingredientId) == 0 && stockDao.recipeUsageOf(ingredientId) == 0) {
+            stockDao.deleteIngredient(ingredientId)
+        }
         true
     }
 

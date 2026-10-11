@@ -1,11 +1,10 @@
 package com.example.alcohol.ui
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -19,6 +18,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -39,17 +39,18 @@ fun FormDialog(
         onDismissRequest = onDismissRequest,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
     ) {
-        BoxWithConstraints(
+        // Высота окна диалога не ограничена, поэтому максимум берём от высоты экрана.
+        val maxDialogHeight = LocalConfiguration.current.screenHeightDp.dp
+        Box(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
                 .imePadding(),
             contentAlignment = Alignment.Center,
         ) {
-            val maxDialogHeight = maxHeight
             Surface(
                 modifier = Modifier
                     .fillMaxWidth(0.92f)
-                    .heightIn(max = maxDialogHeight * 0.9f),
+                    .heightIn(max = maxDialogHeight * 0.8f),
                 shape = AlertDialogDefaults.shape,
                 color = AlertDialogDefaults.containerColor,
                 tonalElevation = AlertDialogDefaults.TonalElevation,

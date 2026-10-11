@@ -29,7 +29,7 @@ fun Modifier.drinkBackdrop(drinkType: DrinkType, ink: Color): Modifier = this.dr
             val angle = if ((row + col) % 2 == 0) -18f else 14f
             withTransform({ rotate(angle, pivot = Offset(x, y)) }) {
                 when (drinkType) {
-                    DrinkType.BEER -> drawHopVine(x, y, ink)
+                    DrinkType.BEER -> Unit // Для пива фон — картинка с хмелем, см. DrinkScreen
                     DrinkType.CIDER -> drawApple(x, y, ink)
                 }
             }

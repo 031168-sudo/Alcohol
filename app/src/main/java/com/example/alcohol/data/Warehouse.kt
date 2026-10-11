@@ -7,6 +7,9 @@ import com.example.alcohol.domain.Lot
 import com.example.alcohol.domain.StageTemplates
 import kotlinx.coroutines.flow.Flow
 
+/** Внутренний сигнал: для правки списаний не хватает ингредиентов. Откатывает транзакцию. */
+private class BatchShortfall(val shortfalls: Map<Long, Double>) : RuntimeException()
+
 sealed interface BrewResult {
     data class Brewed(val batchId: Long, val total: Double) : BrewResult
 
@@ -205,47 +208,63 @@ class Warehouse(private val db: AppDatabase) {
         }
     }
 
+    /** Списания варки, по строкам: что и сколько взято на неё. */
+    fun batchUses(batchId: Long): Flow<List<BatchIngredient>> = batchDao.uses(batchId)
+
+    suspend fun batchUsesOnce(batchId: Long): List<BatchIngredient> = batchDao.usesOnce(batchId)
+
     /**
-     * Дописывает списания в уже сделанную варку, задним числом.
-     * Закупки берутся только те, что сделаны не позже даты варки.
-     * Возвращает нехватку по ингредиентам; если она пустая, списание записано.
+     * Задаёт, что взято на варку: ингредиент -> количество. Ингредиента нет в карте, значит списание снято.
+     * Старые списания возвращаются на закупки, новые распределяются по закупкам, сделанным не позже даты варки.
+     * Если чего-то не хватает, ничего не меняется, а нехватка возвращается.
      */
-    suspend fun addUsage(batchId: Long, needs: Map<Long, Double>): Map<Long, Double> {
-        require(needs.isNotEmpty()) { "Укажи, что списать" }
-        return db.withTransaction {
-            val batch = batchDao.batchOnce(batchId) ?: return@withTransaction emptyMap()
-            val purchases = mutableMapOf<Long, Purchase>()
-            val shortfalls = mutableMapOf<Long, Double>()
-            val plans = mutableListOf<Pair<Long, AllocationResult>>()
-
-            for ((ingredientId, amount) in needs) {
-                val open = stockDao.openPurchasesUntil(ingredientId, batch.startedAt)
-                open.forEach { purchases[it.id] = it }
-                val lots = open.map { Lot(it.id, it.remaining, it.totalPrice / it.quantity) }
-                val result = FifoAllocator.allocate(lots, amount)
-                if (result.shortfall > 0) shortfalls[ingredientId] = result.shortfall
-                plans += ingredientId to result
-            }
-            if (shortfalls.isNotEmpty()) return@withTransaction shortfalls
-
-            val uses = mutableListOf<BatchIngredient>()
-            for ((ingredientId, result) in plans) {
-                for (allocation in result.allocations) {
-                    uses += BatchIngredient(
-                        batchId = batchId,
-                        purchaseId = allocation.purchaseId,
-                        ingredientId = ingredientId,
-                        amount = allocation.amount,
-                        cost = allocation.cost,
-                    )
-                    val current = purchases.getValue(allocation.purchaseId)
-                    val left = current.remaining - allocation.amount
-                    stockDao.setRemaining(allocation.purchaseId, left)
-                    purchases[allocation.purchaseId] = current.copy(remaining = left)
+    suspend fun setBatchUsage(batchId: Long, targets: Map<Long, Double>): Map<Long, Double> {
+        require(targets.values.all { it > 0 }) { "Количество должно быть больше нуля" }
+        return try {
+            db.withTransaction {
+                val batch = batchDao.batchOnce(batchId) ?: return@withTransaction
+                // Возвращаем старые списания на закупки.
+                for (use in batchDao.usesOnce(batchId)) {
+                    val purchase = stockDao.purchase(use.purchaseId) ?: continue
+                    stockDao.setRemaining(purchase.id, purchase.remaining + use.amount)
                 }
+                batchDao.deleteUses(batchId)
+
+                val purchases = mutableMapOf<Long, Purchase>()
+                val shortfalls = mutableMapOf<Long, Double>()
+                val plans = mutableListOf<Pair<Long, AllocationResult>>()
+                for ((ingredientId, amount) in targets) {
+                    val open = stockDao.openPurchasesUntil(ingredientId, batch.startedAt)
+                    open.forEach { purchases[it.id] = it }
+                    val lots = open.map { Lot(it.id, it.remaining, it.totalPrice / it.quantity) }
+                    val result = FifoAllocator.allocate(lots, amount)
+                    if (result.shortfall > 0) shortfalls[ingredientId] = result.shortfall
+                    plans += ingredientId to result
+                }
+                // Нехватка отменяет всю транзакцию, включая возврат старых списаний.
+                if (shortfalls.isNotEmpty()) throw BatchShortfall(shortfalls)
+
+                val uses = mutableListOf<BatchIngredient>()
+                for ((ingredientId, result) in plans) {
+                    for (allocation in result.allocations) {
+                        uses += BatchIngredient(
+                            batchId = batchId,
+                            purchaseId = allocation.purchaseId,
+                            ingredientId = ingredientId,
+                            amount = allocation.amount,
+                            cost = allocation.cost,
+                        )
+                        val current = purchases.getValue(allocation.purchaseId)
+                        val left = current.remaining - allocation.amount
+                        stockDao.setRemaining(allocation.purchaseId, left)
+                        purchases[allocation.purchaseId] = current.copy(remaining = left)
+                    }
+                }
+                batchDao.insertUses(uses)
             }
-            batchDao.insertUses(uses)
             emptyMap()
+        } catch (e: BatchShortfall) {
+            e.shortfalls
         }
     }
 

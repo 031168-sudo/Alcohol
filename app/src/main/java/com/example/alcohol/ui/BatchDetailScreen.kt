@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,7 +48,7 @@ fun BatchDetailScreen(batchId: Long, onBack: () -> Unit) {
     val batch by warehouse.batch(batchId).collectAsState(initial = null)
     val stages by warehouse.stages(batchId).collectAsState(initial = emptyList())
     var completing by remember { mutableStateOf<BatchStage?>(null) }
-    var addingUsage by remember { mutableStateOf(false) }
+    var usageOpen by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     LazyColumn(
@@ -58,13 +59,19 @@ fun BatchDetailScreen(batchId: Long, onBack: () -> Unit) {
         item {
             OutlinedButton(onClick = onBack) { Text("Назад") }
         }
-        item {
-            OutlinedButton(onClick = { addingUsage = true }) { Text("Дополнить списание") }
-        }
         batch?.let { b ->
             item {
-                Text(b.name, style = MaterialTheme.typography.titleLarge)
+                // Нажми на название, чтобы увидеть и поправить всё, что взято на варку.
+                Text(
+                    b.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.clickable { usageOpen = true },
+                )
                 Text("Поставлено ${formatDate(b.startedAt)} · ${b.volumeL} л", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "Нажми на название, чтобы посмотреть и поправить списания",
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
         }
         item { Text("Этапы", style = MaterialTheme.typography.titleMedium) }
@@ -113,11 +120,11 @@ fun BatchDetailScreen(batchId: Long, onBack: () -> Unit) {
         }
     }
 
-    if (addingUsage) {
-        AddUsageDialog(
+    if (usageOpen) {
+        BatchUsageDialog(
             warehouse = warehouse,
             batchId = batchId,
-            onDismiss = { addingUsage = false },
+            onDismiss = { usageOpen = false },
         )
     }
 
@@ -199,52 +206,70 @@ private fun CompleteStageDialog(
     )
 }
 
-/** Списания, которые забыли записать при варке: расходуются так же, как при варке, по дате варки. */
+/**
+ * Всё, что взято на варку: по каждому ингредиенту его количество и стоимость.
+ * Количество можно поправить, очистить (списание снимется) или добавить новый ингредиент.
+ */
 @Composable
-private fun AddUsageDialog(warehouse: Warehouse, batchId: Long, onDismiss: () -> Unit) {
+private fun BatchUsageDialog(warehouse: Warehouse, batchId: Long, onDismiss: () -> Unit) {
     val stock by warehouse.stock().collectAsState(initial = emptyList())
+    val uses by warehouse.batchUses(batchId).collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     val amounts = remember { mutableStateMapOf<Long, String>() }
+    var loaded by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+
+    // Один раз заполняем поля текущими списаниями, дальше правит пользователь.
+    LaunchedEffect(batchId) {
+        if (!loaded) {
+            warehouse.batchUsesOnce(batchId)
+                .groupBy { it.ingredientId }
+                .forEach { (id, rows) -> amounts[id] = rows.sumOf { it.amount }.toPlainString() }
+            loaded = true
+        }
+    }
+
+    val totalCost = uses.sumOf { it.cost }
 
     FormDialog(
         onDismissRequest = onDismiss,
         message = error,
-        title = { Text("Дополнить списание") },
+        title = { Text("На варку взято") },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    "Закупки берутся только те, что сделаны не позже даты варки.",
+                    "Всего на ${"%.2f".format(totalCost)} ₽. Очисти поле, чтобы снять списание. " +
+                        "Закупки берутся только те, что сделаны не позже даты варки.",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 if (stock.isEmpty()) Text("На складе пока пусто.")
                 stock.forEach { row ->
+                    val cost = uses.filter { it.ingredientId == row.ingredientId }.sumOf { it.cost }
                     OutlinedTextField(
                         value = amounts[row.ingredientId] ?: "",
                         onValueChange = { amounts[row.ingredientId] = it },
                         label = { Text("${row.name}, ${row.unit}") },
                         singleLine = true,
                     )
+                    if (cost > 0) {
+                        Text("Стоимость: ${"%.2f".format(cost)} ₽", style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
         },
         confirmButton = {
             Button(onClick = {
-                val needs = amounts
+                val targets = amounts
                     .mapNotNull { (id, text) ->
                         text.replace(',', '.').toDoubleOrNull()?.takeIf { it > 0 }?.let { id to it }
                     }
                     .toMap()
-                if (needs.isEmpty()) {
-                    error = "Укажи, что списать"
-                    return@Button
-                }
                 error = null
                 scope.launch {
-                    val shortfalls = warehouse.addUsage(batchId, needs)
+                    val shortfalls = warehouse.setBatchUsage(batchId, targets)
                     if (shortfalls.isEmpty()) {
                         onDismiss()
                     } else {
@@ -254,8 +279,11 @@ private fun AddUsageDialog(warehouse: Warehouse, batchId: Long, onDismiss: () ->
                         }
                     }
                 }
-            }) { Text("Списать") }
+            }) { Text("Сохранить") }
         },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Отмена") } },
     )
 }
+
+private fun Double.toPlainString(): String =
+    if (this % 1.0 == 0.0) this.toLong().toString() else this.toString()

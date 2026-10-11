@@ -68,6 +68,15 @@ interface BatchDao {
     @Insert
     suspend fun insertUses(uses: List<BatchIngredient>)
 
+    @Query("SELECT * FROM batch_ingredients WHERE batchId = :batchId")
+    suspend fun usesOnce(batchId: Long): List<BatchIngredient>
+
+    @Query("SELECT * FROM batch_ingredients WHERE batchId = :batchId")
+    fun uses(batchId: Long): Flow<List<BatchIngredient>>
+
+    @Query("DELETE FROM batch_ingredients WHERE batchId = :batchId")
+    suspend fun deleteUses(batchId: Long)
+
     @Insert
     suspend fun insertStages(stages: List<BatchStage>)
 

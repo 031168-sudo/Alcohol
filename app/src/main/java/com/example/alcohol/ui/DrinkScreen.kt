@@ -1,0 +1,123 @@
+package com.example.alcohol.ui
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import com.example.alcohol.data.AppDatabase
+import com.example.alcohol.data.DrinkType
+import com.example.alcohol.data.Recipe
+import com.example.alcohol.data.Warehouse
+import kotlinx.coroutines.launch
+
+/** Вкладка «Пиво» или «Сидр»: рецепты для варки, список партий и открытая партия. */
+@Composable
+fun DrinkScreen(drinkType: DrinkType) {
+    val context = LocalContext.current
+    val warehouse = remember { Warehouse(AppDatabase.get(context)) }
+    val recipes by warehouse.recipes(drinkType).collectAsState(initial = emptyList())
+    val batches by warehouse.batches(drinkType).collectAsState(initial = emptyList())
+
+    var openedBatchId by remember { mutableStateOf<Long?>(null) }
+    var brewing by remember { mutableStateOf<Recipe?>(null) }
+    var creatingRecipe by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    openedBatchId?.let { id ->
+        BatchDetailScreen(batchId = id, onBack = { openedBatchId = null })
+        return
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item {
+            Button(onClick = { creatingRecipe = true }) { Text("Новый рецепт") }
+        }
+
+        item { Text("Рецепты", style = MaterialTheme.typography.titleMedium) }
+        if (recipes.isEmpty()) {
+            item { Text("Рецептов пока нет") }
+        }
+        items(recipes, key = { "r${it.id}" }) { recipe ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(recipe.name, style = MaterialTheme.typography.titleSmall)
+                    Text("Партия ${recipe.batchVolumeL} л", style = MaterialTheme.typography.bodyMedium)
+                    Button(onClick = { brewing = recipe }) { Text("Сварить") }
+                }
+            }
+        }
+
+        item { Text("Партии", style = MaterialTheme.typography.titleMedium) }
+        if (batches.isEmpty()) {
+            item { Text("Партий пока нет") }
+        }
+        items(batches, key = { "b${it.batch.id}" }) { summary ->
+            val perLiter = summary.total / summary.batch.volumeL
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { openedBatchId = summary.batch.id },
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(summary.batch.name, style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "${formatDate(summary.batch.startedAt)} · ${summary.batch.volumeL} л",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        "Себестоимость: %.0f ₽ · %.1f ₽/л".format(summary.total, perLiter),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+            }
+        }
+    }
+
+    if (creatingRecipe) {
+        RecipeDialog(
+            drinkType = drinkType,
+            onDismiss = { creatingRecipe = false },
+            onSave = { name, volume, items ->
+                scope.launch {
+                    warehouse.createRecipe(name, drinkType, volume, items)
+                    creatingRecipe = false
+                }
+            },
+        )
+    }
+
+    brewing?.let { recipe ->
+        BrewDialog(
+            recipe = recipe,
+            drinkType = drinkType,
+            onDismiss = { brewing = null },
+            onBrewed = { batchId ->
+                brewing = null
+                openedBatchId = batchId
+            },
+        )
+    }
+}

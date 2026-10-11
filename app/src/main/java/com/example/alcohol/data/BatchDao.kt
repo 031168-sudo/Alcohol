@@ -4,12 +4,21 @@ import androidx.room.Dao
 import androidx.room.Embedded
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 /** Партия со своей стоимостью, посчитанной по списанным закупкам. */
 data class BatchSummary(
     @Embedded val batch: Batch,
     val total: Double,
+)
+
+/** Этап, который скоро наступает или уже просрочен, для напоминаний. */
+data class DueStage(
+    val stageId: Long,
+    val batchName: String,
+    val type: StageType,
+    val plannedAt: Long,
 )
 
 @Dao
@@ -27,9 +36,41 @@ interface BatchDao {
     )
     fun summaries(type: DrinkType): Flow<List<BatchSummary>>
 
+    @Query("SELECT * FROM batches WHERE id = :batchId")
+    fun batch(batchId: Long): Flow<Batch?>
+
+    @Query("SELECT * FROM batch_stages WHERE batchId = :batchId ORDER BY id")
+    fun stages(batchId: Long): Flow<List<BatchStage>>
+
+    @Query("SELECT * FROM batches WHERE id = :batchId")
+    suspend fun batchOnce(batchId: Long): Batch?
+
+    @Query("SELECT * FROM batch_stages WHERE batchId = :batchId ORDER BY id")
+    suspend fun stagesOnce(batchId: Long): List<BatchStage>
+
+    @Query("SELECT * FROM batch_stages WHERE id = :stageId")
+    suspend fun stage(stageId: Long): BatchStage?
+
+    @Query(
+        """
+        SELECT s.id AS stageId, b.name AS batchName, s.type AS type, s.plannedAt AS plannedAt
+        FROM batch_stages s
+        JOIN batches b ON b.id = s.batchId
+        WHERE s.doneAt IS NULL AND s.plannedAt IS NOT NULL AND s.plannedAt <= :until
+        ORDER BY s.plannedAt
+        """
+    )
+    suspend fun dueStages(until: Long): List<DueStage>
+
     @Insert
     suspend fun insertBatch(batch: Batch): Long
 
     @Insert
     suspend fun insertUses(uses: List<BatchIngredient>)
+
+    @Insert
+    suspend fun insertStages(stages: List<BatchStage>)
+
+    @Update
+    suspend fun updateStage(stage: BatchStage)
 }

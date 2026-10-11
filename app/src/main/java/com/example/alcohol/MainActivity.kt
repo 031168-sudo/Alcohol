@@ -6,14 +6,22 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,14 +37,20 @@ import com.example.alcohol.ui.StockScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Контент рисуется под системными панелями; отступы задаёт Scaffold через safeDrawing.
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         ensureChannel(this)
         scheduleStageReminders(this)
         setContent {
-            MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    NotificationPermission()
-                    MainTabs()
+            // Цвета следуют системной теме: светлая или тёмная, без жёстких белых подложек.
+            val colors = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()
+            MaterialTheme(colorScheme = colors) {
+                NotificationPermission()
+                Scaffold(
+                    contentWindowInsets = WindowInsets.safeDrawing,
+                ) { innerPadding ->
+                    MainTabs(modifier = Modifier.padding(innerPadding))
                 }
             }
         }
@@ -56,10 +70,10 @@ private fun NotificationPermission() {
 private val tabs = listOf("Пиво", "Сидр", "Склад")
 
 @Composable
-fun MainTabs() {
+fun MainTabs(modifier: Modifier = Modifier) {
     var selected by remember { mutableIntStateOf(0) }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = modifier.fillMaxSize()) {
         TabRow(selectedTabIndex = selected) {
             tabs.forEachIndexed { index, title ->
                 Tab(

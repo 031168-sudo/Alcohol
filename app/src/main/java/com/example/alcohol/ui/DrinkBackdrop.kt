@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.ImageShader
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.TileMode
@@ -17,7 +18,7 @@ import com.example.alcohol.data.DrinkType
  */
 @Composable
 fun Modifier.drinkBackdrop(drinkType: DrinkType): Modifier {
-    val tile = imageResource(
+    val tile = ImageBitmap.imageResource(
         if (drinkType == DrinkType.BEER) R.drawable.hop_pattern else R.drawable.apple_pattern,
     )
     val brush = ShaderBrush(ImageShader(tile, TileMode.Repeated, TileMode.Repeated))

@@ -8,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -19,6 +20,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -32,6 +34,8 @@ import com.example.alcohol.ui.AlcoholTheme
 import com.example.alcohol.ui.CrashDialog
 import com.example.alcohol.ui.CrashReport
 import com.example.alcohol.ui.DrinkScreen
+import com.example.alcohol.ui.FormHost
+import com.example.alcohol.ui.LocalFormHost
 import com.example.alcohol.ui.StockScreen
 
 class MainActivity : ComponentActivity() {
@@ -45,12 +49,19 @@ class MainActivity : ComponentActivity() {
         setContent {
             // Пастельная зелёная палитра; светлая или тёмная по системной теме.
             AlcoholTheme {
-                NotificationPermission()
-                CrashDialog()
-                Scaffold(
-                    contentWindowInsets = WindowInsets.safeDrawing,
-                ) { innerPadding ->
-                    MainTabs(modifier = Modifier.padding(innerPadding))
+                val formHost = remember { FormHost() }
+                CompositionLocalProvider(LocalFormHost provides formHost) {
+                    NotificationPermission()
+                    CrashDialog()
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        Scaffold(
+                            contentWindowInsets = WindowInsets.safeDrawing,
+                        ) { innerPadding ->
+                            MainTabs(modifier = Modifier.padding(innerPadding))
+                        }
+                        // Открытые формы поверх всего экрана, последняя — сверху.
+                        formHost.entries.forEach { it.content() }
+                    }
                 }
             }
         }

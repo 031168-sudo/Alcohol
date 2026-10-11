@@ -55,7 +55,10 @@ fun RecipeDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (existing == null) "Новый рецепт" else "Изменить рецепт") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -72,10 +75,7 @@ fun RecipeDialog(
                 if (stock.isEmpty()) {
                     Text("На складе пока пусто. Сначала добавь закупки.")
                 }
-                Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     stock.forEach { row ->
                         OutlinedTextField(
                             value = amounts[row.ingredientId] ?: "",

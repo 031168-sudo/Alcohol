@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -58,7 +57,7 @@ fun BrewDialog(
     val names = stock.associate { it.ingredientId to "${it.name} (${it.unit})" }
     val units = stock.associate { it.ingredientId to it.unit }
 
-    AlertDialog(
+    FormDialog(
         onDismissRequest = onDismiss,
         title = { Text("Варим: ${recipe.name}") },
         text = {

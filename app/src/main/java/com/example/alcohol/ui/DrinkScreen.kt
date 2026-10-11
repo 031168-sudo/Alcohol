@@ -14,7 +14,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
@@ -145,7 +144,7 @@ fun DrinkScreen(drinkType: DrinkType) {
     }
 
     deletingRecipe?.let { recipe ->
-        AlertDialog(
+        FormDialog(
             onDismissRequest = { deletingRecipe = null },
             title = { Text("Удалить рецепт?") },
             text = { Text("«${recipe.name}» пропадёт из списка. Уже сваренные партии останутся.") },

@@ -275,6 +275,9 @@ class Warehouse(private val db: AppDatabase) {
         }
     }
 
+    /** Все закупки, новые сверху. */
+    fun allPurchases(): Flow<List<Purchase>> = stockDao.allPurchases()
+
     /** Закупки ингредиента, новые сверху. */
     fun purchasesOf(ingredientId: Long): Flow<List<Purchase>> = stockDao.purchasesOf(ingredientId)
 

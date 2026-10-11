@@ -15,7 +15,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
@@ -143,7 +142,7 @@ private fun IngredientDialog(
 
     val category = categories.firstOrNull { it.id == categoryId }
 
-    AlertDialog(
+    FormDialog(
         onDismissRequest = onDismiss,
         title = { Text("Позиция склада") },
         text = {
@@ -209,6 +208,9 @@ private fun IngredientDialog(
 /** Единицы измерения для склада. Выбираются из списка. */
 private val stockUnits = listOf("г", "кг", "мл", "л", "шт.")
 
+/** 1000.0 → «1000», 2.5 → «2.5». */
+private fun Double.plain(): String = if (this == toLong().toDouble()) toLong().toString() else toString()
+
 /** Закупки одной позиции склада: можно изменить или удалить каждую. */
 @Composable
 private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -> Unit) {
@@ -219,7 +221,7 @@ private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -
     var editingIngredient by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
 
-    AlertDialog(
+    FormDialog(
         onDismissRequest = onDismiss,
         title = { Text(row.name) },
         text = {
@@ -300,6 +302,8 @@ private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -
 private fun PurchaseDialog(warehouse: Warehouse, existing: Purchase? = null, onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
     val categories by warehouse.categories().collectAsState(initial = emptyList())
+    val stock by warehouse.stock().collectAsState(initial = emptyList())
+    val purchases by warehouse.allPurchases().collectAsState(initial = emptyList())
 
     var name by remember { mutableStateOf("") }
     var categoryId by remember { mutableStateOf<Long?>(null) }
@@ -315,7 +319,7 @@ private fun PurchaseDialog(warehouse: Warehouse, existing: Purchase? = null, onD
 
     val selected: Category? = categories.firstOrNull { it.id == categoryId } ?: categories.firstOrNull()
 
-    AlertDialog(
+    FormDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (existing == null) "Новая закупка" else "Изменить закупку") },
         text = {
@@ -330,6 +334,30 @@ private fun PurchaseDialog(warehouse: Warehouse, existing: Purchase? = null, onD
                         label = { Text("Название") },
                         singleLine = true,
                     )
+                    // Подсказки по первым трём буквам: выбор подставляет категорию, единицу и последнее количество.
+                    val query = name.trim()
+                    val suggestions = if (query.length >= 3) {
+                        stock.filter { row ->
+                            row.name.startsWith(query, ignoreCase = true) &&
+                                !(row.name == query && row.categoryId == categoryId)
+                        }.take(5)
+                    } else {
+                        emptyList()
+                    }
+                    suggestions.forEach { row ->
+                        OutlinedButton(
+                            onClick = {
+                                name = row.name
+                                categoryId = row.categoryId
+                                unit = row.unit
+                                purchases.firstOrNull { it.ingredientId == row.ingredientId }
+                                    ?.let { quantityText = it.quantity.plain() }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("${row.name} · ${row.category} · ${row.unit}")
+                        }
+                    }
                     Column {
                         OutlinedButton(onClick = { menuOpen = true }) {
                             Text("Категория: ${selected?.name ?: "нет категорий"}")
@@ -430,7 +458,7 @@ private fun CategoriesDialog(warehouse: Warehouse, onDismiss: () -> Unit) {
     var editText by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
 
-    AlertDialog(
+    FormDialog(
         onDismissRequest = onDismiss,
         title = { Text("Категории") },
         text = {

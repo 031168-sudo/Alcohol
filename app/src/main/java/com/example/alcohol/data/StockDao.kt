@@ -85,6 +85,10 @@ interface StockDao {
     @Query("UPDATE purchases SET remaining = :remaining WHERE id = :purchaseId")
     suspend fun setRemaining(purchaseId: Long, remaining: Double)
 
+    /** Все закупки, новые сверху. Нужны для подсказок при вводе названия. */
+    @Query("SELECT * FROM purchases ORDER BY purchasedAt DESC, id DESC")
+    fun allPurchases(): Flow<List<Purchase>>
+
     /** Все закупки ингредиента, новые сверху. */
     @Query("SELECT * FROM purchases WHERE ingredientId = :ingredientId ORDER BY purchasedAt DESC, id DESC")
     fun purchasesOf(ingredientId: Long): Flow<List<Purchase>>

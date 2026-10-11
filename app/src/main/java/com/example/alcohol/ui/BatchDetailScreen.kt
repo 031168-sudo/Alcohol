@@ -49,6 +49,7 @@ fun BatchDetailScreen(batchId: Long, onBack: () -> Unit) {
     val stages by warehouse.stages(batchId).collectAsState(initial = emptyList())
     var completing by remember { mutableStateOf<BatchStage?>(null) }
     var usageOpen by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     LazyColumn(
@@ -58,6 +59,9 @@ fun BatchDetailScreen(batchId: Long, onBack: () -> Unit) {
     ) {
         item {
             OutlinedButton(onClick = onBack) { Text("Назад") }
+        }
+        item {
+            OutlinedButton(onClick = { confirmDelete = true }) { Text("Удалить партию") }
         }
         batch?.let { b ->
             item {
@@ -120,6 +124,28 @@ fun BatchDetailScreen(batchId: Long, onBack: () -> Unit) {
         }
     }
 
+    if (confirmDelete) {
+        FormDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Удалить партию?") },
+            text = {
+                Text(
+                    "Всё, что партия взяла со склада, вернётся на закупки. Этапы и списания будут удалены. " +
+                        "Это нельзя отменить.",
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    scope.launch {
+                        warehouse.deleteBatch(batchId)
+                        confirmDelete = false
+                        onBack()
+                    }
+                }) { Text("Удалить") }
+            },
+            dismissButton = { OutlinedButton(onClick = { confirmDelete = false }) { Text("Отмена") } },
+        )
+    }
     if (usageOpen) {
         BatchUsageDialog(
             warehouse = warehouse,

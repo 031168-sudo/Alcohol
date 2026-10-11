@@ -256,6 +256,22 @@ class Warehouse(private val db: AppDatabase) {
     suspend fun batchUsesOnce(batchId: Long): List<BatchIngredient> = batchDao.usesOnce(batchId)
 
     /**
+     * Удаляет партию. Всё, что она взяла со склада, возвращается на те же закупки,
+     * откуда списывалось, а этапы и списания удаляются вместе с ней.
+     */
+    suspend fun deleteBatch(batchId: Long) {
+        db.withTransaction {
+            for (use in batchDao.usesOnce(batchId)) {
+                val purchase = stockDao.purchase(use.purchaseId) ?: continue
+                stockDao.setRemaining(purchase.id, purchase.remaining + use.amount)
+            }
+            batchDao.deleteUses(batchId)
+            batchDao.deleteStages(batchId)
+            batchDao.deleteBatch(batchId)
+        }
+    }
+
+    /**
      * Задаёт, что взято на варку: ингредиент -> количество. Ингредиента нет в карте, значит списание снято.
      * Старые списания возвращаются на закупки, новые распределяются по закупкам, сделанным не позже даты варки.
      * Если чего-то не хватает, ничего не меняется, а нехватка возвращается.

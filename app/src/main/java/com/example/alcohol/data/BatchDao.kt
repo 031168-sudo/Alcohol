@@ -90,6 +90,12 @@ interface BatchDao {
     @Query("DELETE FROM batch_ingredients WHERE batchId = :batchId")
     suspend fun deleteUses(batchId: Long)
 
+    @Query("DELETE FROM batch_stages WHERE batchId = :batchId")
+    suspend fun deleteStages(batchId: Long)
+
+    @Query("DELETE FROM batches WHERE id = :batchId")
+    suspend fun deleteBatch(batchId: Long)
+
     @Insert
     suspend fun insertStages(stages: List<BatchStage>)
 

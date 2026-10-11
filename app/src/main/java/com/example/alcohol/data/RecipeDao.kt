@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -20,4 +21,17 @@ interface RecipeDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertItems(items: List<RecipeItem>)
+
+    @Update
+    suspend fun update(recipe: Recipe)
+
+    @Query("DELETE FROM recipe_items WHERE recipeId = :recipeId")
+    suspend fun deleteItems(recipeId: Long)
+
+    /** Сваренные по рецепту партии остаются, но теряют ссылку на него. */
+    @Query("UPDATE batches SET recipeId = NULL WHERE recipeId = :recipeId")
+    suspend fun detachBatches(recipeId: Long)
+
+    @Query("DELETE FROM recipes WHERE id = :recipeId")
+    suspend fun deleteRecipe(recipeId: Long)
 }

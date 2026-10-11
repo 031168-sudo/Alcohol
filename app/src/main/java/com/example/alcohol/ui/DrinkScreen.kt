@@ -4,15 +4,19 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -39,7 +43,10 @@ fun DrinkScreen(drinkType: DrinkType) {
 
     var openedBatchId by remember { mutableStateOf<Long?>(null) }
     var brewing by remember { mutableStateOf<Recipe?>(null) }
-    var creatingRecipe by remember { mutableStateOf(false) }
+    var showRecipeDialog by remember { mutableStateOf(false) }
+    /** Рецепт, который сейчас редактируем. null — создаём новый. */
+    var editingRecipe by remember { mutableStateOf<Recipe?>(null) }
+    var deletingRecipe by remember { mutableStateOf<Recipe?>(null) }
     val scope = rememberCoroutineScope()
 
     openedBatchId?.let { id ->
@@ -53,7 +60,10 @@ fun DrinkScreen(drinkType: DrinkType) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            Button(onClick = { creatingRecipe = true }) { Text("Новый рецепт") }
+            Button(onClick = {
+                editingRecipe = null
+                showRecipeDialog = true
+            }) { Text("Новый рецепт") }
         }
 
         item { Text("Рецепты", style = MaterialTheme.typography.titleMedium) }
@@ -65,7 +75,17 @@ fun DrinkScreen(drinkType: DrinkType) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(recipe.name, style = MaterialTheme.typography.titleSmall)
                     Text("Партия ${recipe.batchVolumeL} л", style = MaterialTheme.typography.bodyMedium)
-                    Button(onClick = { brewing = recipe }) { Text("Сварить") }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Button(onClick = { brewing = recipe }) { Text("Сварить") }
+                        OutlinedButton(onClick = {
+                            editingRecipe = recipe
+                            showRecipeDialog = true
+                        }) { Text("Изменить") }
+                        TextButton(onClick = { deletingRecipe = recipe }) { Text("Удалить") }
+                    }
                 }
             }
         }
@@ -96,16 +116,37 @@ fun DrinkScreen(drinkType: DrinkType) {
         }
     }
 
-    if (creatingRecipe) {
+    if (showRecipeDialog) {
         RecipeDialog(
             drinkType = drinkType,
-            onDismiss = { creatingRecipe = false },
+            existing = editingRecipe,
+            onDismiss = { showRecipeDialog = false },
             onSave = { name, volume, items ->
                 scope.launch {
-                    warehouse.createRecipe(name, drinkType, volume, items)
-                    creatingRecipe = false
+                    val target = editingRecipe
+                    if (target == null) {
+                        warehouse.createRecipe(name, drinkType, volume, items)
+                    } else {
+                        warehouse.updateRecipe(target.copy(name = name, batchVolumeL = volume), items)
+                    }
+                    showRecipeDialog = false
                 }
             },
+        )
+    }
+
+    deletingRecipe?.let { recipe ->
+        AlertDialog(
+            onDismissRequest = { deletingRecipe = null },
+            title = { Text("Удалить рецепт?") },
+            text = { Text("«${recipe.name}» пропадёт из списка. Уже сваренные партии останутся.") },
+            confirmButton = {
+                Button(onClick = {
+                    scope.launch { warehouse.deleteRecipe(recipe.id) }
+                    deletingRecipe = null
+                }) { Text("Удалить") }
+            },
+            dismissButton = { OutlinedButton(onClick = { deletingRecipe = null }) { Text("Отмена") } },
         )
     }
 

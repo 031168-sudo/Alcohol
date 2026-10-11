@@ -8,20 +8,16 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -32,6 +28,7 @@ import androidx.compose.ui.Modifier
 import com.example.alcohol.data.DrinkType
 import com.example.alcohol.notify.ensureChannel
 import com.example.alcohol.notify.scheduleStageReminders
+import com.example.alcohol.ui.AlcoholTheme
 import com.example.alcohol.ui.DrinkScreen
 import com.example.alcohol.ui.StockScreen
 
@@ -43,9 +40,8 @@ class MainActivity : ComponentActivity() {
         ensureChannel(this)
         scheduleStageReminders(this)
         setContent {
-            // Цвета следуют системной теме: светлая или тёмная, без жёстких белых подложек.
-            val colors = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()
-            MaterialTheme(colorScheme = colors) {
+            // Пастельная зелёная палитра; светлая или тёмная по системной теме.
+            AlcoholTheme {
                 NotificationPermission()
                 Scaffold(
                     contentWindowInsets = WindowInsets.safeDrawing,

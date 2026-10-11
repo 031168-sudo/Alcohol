@@ -1,5 +1,6 @@
 package com.example.alcohol.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -33,6 +34,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.alcohol.data.AppDatabase
 import com.example.alcohol.data.Category
+import com.example.alcohol.data.Purchase
+import com.example.alcohol.data.StockRow
 import com.example.alcohol.data.Warehouse
 import kotlinx.coroutines.launch
 
@@ -43,6 +46,7 @@ fun StockScreen() {
     val stock by warehouse.stock().collectAsState(initial = emptyList())
     var showPurchase by remember { mutableStateOf(false) }
     var showCategories by remember { mutableStateOf(false) }
+    var openedStock by remember { mutableStateOf<StockRow?>(null) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -62,13 +66,22 @@ fun StockScreen() {
                 style = MaterialTheme.typography.bodyLarge,
             )
         } else {
+            Text(
+                "Нажми на позицию, чтобы посмотреть, изменить или удалить её закупки.",
+                modifier = Modifier.padding(horizontal = 16.dp),
+                style = MaterialTheme.typography.bodySmall,
+            )
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(stock, key = { it.ingredientId }) { row ->
-                    Card(modifier = Modifier.fillMaxWidth()) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { openedStock = row },
+                    ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(row.name, style = MaterialTheme.typography.titleSmall)
                             Text(
@@ -95,10 +108,80 @@ fun StockScreen() {
             onDismiss = { showCategories = false },
         )
     }
+
+    openedStock?.let { row ->
+        PurchasesDialog(
+            warehouse = warehouse,
+            row = row,
+            onDismiss = { openedStock = null },
+        )
+    }
 }
 
+/** Закупки одной позиции склада: можно изменить или удалить каждую. */
 @Composable
-private fun PurchaseDialog(warehouse: Warehouse, onDismiss: () -> Unit) {
+private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val purchases by warehouse.purchasesOf(row.ingredientId).collectAsState(initial = emptyList())
+
+    var editing by remember { mutableStateOf<Purchase?>(null) }
+    var message by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(row.name) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (purchases.isEmpty()) {
+                    Text("Закупок пока нет")
+                }
+                purchases.forEach { purchase ->
+                    Column {
+                        Text(
+                            "${formatDate(purchase.purchasedAt)} · %.1f %s · %.0f ₽".format(
+                                purchase.quantity, row.unit, purchase.totalPrice,
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            "Осталось %.1f %s".format(purchase.remaining, row.unit),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Row {
+                            TextButton(onClick = { editing = purchase }) { Text("Изменить") }
+                            TextButton(onClick = {
+                                scope.launch {
+                                    message = if (warehouse.deletePurchase(purchase.id)) {
+                                        null
+                                    } else {
+                                        "Из этой закупки уже списано в варку, удалить нельзя"
+                                    }
+                                }
+                            }) { Text("Удалить") }
+                        }
+                    }
+                }
+                message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            }
+        },
+        confirmButton = { Button(onClick = onDismiss) { Text("Готово") } },
+    )
+
+    editing?.let { purchase ->
+        PurchaseDialog(
+            warehouse = warehouse,
+            existing = purchase,
+            onDismiss = { editing = null },
+        )
+    }
+}
+
+/** Новая закупка, или изменение существующей (тогда название и категория не меняются). */
+@Composable
+private fun PurchaseDialog(warehouse: Warehouse, existing: Purchase? = null, onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
     val categories by warehouse.categories().collectAsState(initial = emptyList())
 
@@ -106,49 +189,53 @@ private fun PurchaseDialog(warehouse: Warehouse, onDismiss: () -> Unit) {
     var categoryId by remember { mutableStateOf<Long?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
     var unit by remember { mutableStateOf("г") }
-    var quantityText by remember { mutableStateOf("") }
-    var priceText by remember { mutableStateOf("") }
-    var dateText by remember { mutableStateOf(formatDate(System.currentTimeMillis())) }
+    var quantityText by remember { mutableStateOf(existing?.quantity?.toString() ?: "") }
+    var priceText by remember { mutableStateOf(existing?.totalPrice?.toString() ?: "") }
+    var dateText by remember {
+        mutableStateOf(formatDate(existing?.purchasedAt ?: System.currentTimeMillis()))
+    }
     var error by remember { mutableStateOf<String?>(null) }
 
     val selected: Category? = categories.firstOrNull { it.id == categoryId } ?: categories.firstOrNull()
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Новая закупка") },
+        title = { Text(if (existing == null) "Новая закупка" else "Изменить закупку") },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Название") },
-                    singleLine = true,
-                )
-                Column {
-                    OutlinedButton(onClick = { menuOpen = true }) {
-                        Text("Категория: ${selected?.name ?: "нет категорий"}")
-                    }
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        categories.forEach { category ->
-                            DropdownMenuItem(
-                                text = { Text(category.name) },
-                                onClick = {
-                                    categoryId = category.id
-                                    menuOpen = false
-                                },
-                            )
+                if (existing == null) {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Название") },
+                        singleLine = true,
+                    )
+                    Column {
+                        OutlinedButton(onClick = { menuOpen = true }) {
+                            Text("Категория: ${selected?.name ?: "нет категорий"}")
+                        }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            categories.forEach { category ->
+                                DropdownMenuItem(
+                                    text = { Text(category.name) },
+                                    onClick = {
+                                        categoryId = category.id
+                                        menuOpen = false
+                                    },
+                                )
+                            }
                         }
                     }
+                    OutlinedTextField(
+                        value = unit,
+                        onValueChange = { unit = it },
+                        label = { Text("Единица (г, мл, шт.)") },
+                        singleLine = true,
+                    )
                 }
-                OutlinedTextField(
-                    value = unit,
-                    onValueChange = { unit = it },
-                    label = { Text("Единица (г, мл, шт.)") },
-                    singleLine = true,
-                )
                 OutlinedTextField(
                     value = quantityText,
                     onValueChange = { quantityText = it },
@@ -176,22 +263,30 @@ private fun PurchaseDialog(warehouse: Warehouse, onDismiss: () -> Unit) {
                 val price = priceText.replace(',', '.').toDoubleOrNull()
                 val purchasedAt = parseDate(dateText)
                 when {
-                    name.isBlank() -> error = "Укажи название"
-                    selected == null -> error = "Сначала создай категорию"
-                    unit.isBlank() -> error = "Укажи единицу измерения"
+                    existing == null && name.isBlank() -> error = "Укажи название"
+                    existing == null && selected == null -> error = "Сначала создай категорию"
+                    existing == null && unit.isBlank() -> error = "Укажи единицу измерения"
                     quantity == null || quantity <= 0 -> error = "Количество должно быть больше нуля"
                     price == null || price < 0 -> error = "Укажи сумму покупки"
                     purchasedAt == null -> error = "Дата в формате дд.мм.гггг"
                     else -> scope.launch {
-                        warehouse.purchase(
-                            name = name,
-                            categoryId = selected.id,
-                            unit = unit,
-                            quantity = quantity,
-                            totalPrice = price,
-                            purchasedAt = purchasedAt,
-                        )
-                        onDismiss()
+                        try {
+                            if (existing != null) {
+                                warehouse.updatePurchase(existing.id, purchasedAt, quantity, price)
+                            } else if (selected != null) {
+                                warehouse.purchase(
+                                    name = name,
+                                    categoryId = selected.id,
+                                    unit = unit,
+                                    quantity = quantity,
+                                    totalPrice = price,
+                                    purchasedAt = purchasedAt,
+                                )
+                            }
+                            onDismiss()
+                        } catch (e: IllegalArgumentException) {
+                            error = e.message
+                        }
                     }
                 }
             }) { Text("Сохранить") }

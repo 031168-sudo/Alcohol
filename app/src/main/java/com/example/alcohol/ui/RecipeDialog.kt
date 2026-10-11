@@ -11,6 +11,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -22,12 +23,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.alcohol.data.AppDatabase
 import com.example.alcohol.data.DrinkType
+import com.example.alcohol.data.Recipe
 import com.example.alcohol.data.Warehouse
 
-/** Новый рецепт: название, объём и количество каждого ингредиента со склада на партию. */
+/**
+ * Рецепт: название, объём и количество каждого ингредиента со склада на партию.
+ * Если передан existing, форма открывается с его данными для редактирования.
+ */
 @Composable
 fun RecipeDialog(
     drinkType: DrinkType,
+    existing: Recipe? = null,
     onDismiss: () -> Unit,
     onSave: (name: String, volumeL: Double, items: Map<Long, Double>) -> Unit,
 ) {
@@ -35,14 +41,20 @@ fun RecipeDialog(
     val warehouse = remember { Warehouse(AppDatabase.get(context)) }
     val stock by warehouse.stock().collectAsState(initial = emptyList())
 
-    var name by remember { mutableStateOf("") }
-    var volumeText by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(existing?.name ?: "") }
+    var volumeText by remember { mutableStateOf(existing?.batchVolumeL?.toString() ?: "") }
     val amounts = remember { mutableStateMapOf<Long, String>() }
     var error by remember { mutableStateOf<String?>(null) }
 
+    LaunchedEffect(existing?.id) {
+        if (existing != null) {
+            warehouse.recipeItems(existing.id).forEach { amounts[it.ingredientId] = it.amount.toString() }
+        }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Новый рецепт") },
+        title = { Text(if (existing == null) "Новый рецепт" else "Изменить рецепт") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(

@@ -3,6 +3,7 @@ package com.example.alcohol.data
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 /** Строка склада: ингредиент, его категория и сколько осталось по всем закупкам. */
@@ -48,4 +49,21 @@ interface StockDao {
 
     @Query("UPDATE purchases SET remaining = :remaining WHERE id = :purchaseId")
     suspend fun setRemaining(purchaseId: Long, remaining: Double)
+
+    /** Все закупки ингредиента, новые сверху. */
+    @Query("SELECT * FROM purchases WHERE ingredientId = :ingredientId ORDER BY purchasedAt DESC, id DESC")
+    fun purchasesOf(ingredientId: Long): Flow<List<Purchase>>
+
+    @Query("SELECT * FROM purchases WHERE id = :id")
+    suspend fun purchase(id: Long): Purchase?
+
+    @Update
+    suspend fun updatePurchase(purchase: Purchase)
+
+    @Query("DELETE FROM purchases WHERE id = :id")
+    suspend fun deletePurchase(id: Long)
+
+    /** Сколько раз закупка уже списана в варки. */
+    @Query("SELECT COUNT(*) FROM batch_ingredients WHERE purchaseId = :purchaseId")
+    suspend fun usageCount(purchaseId: Long): Int
 }

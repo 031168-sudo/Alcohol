@@ -237,5 +237,64 @@ class Warehouse(private val db: AppDatabase) {
         }
     }
 
+    /** Закупки ингредиента, новые сверху. */
+    fun purchasesOf(ingredientId: Long): Flow<List<Purchase>> = stockDao.purchasesOf(ingredientId)
+
+    /**
+     * Меняет дату, количество и сумму закупки. Остаток пересчитывается,
+     * но уже списанное в варки не возвращается: количество не может стать меньше списанного.
+     */
+    suspend fun updatePurchase(id: Long, purchasedAt: Long, quantity: Double, totalPrice: Double) {
+        require(quantity > 0) { "Количество должно быть больше нуля" }
+        require(totalPrice >= 0) { "Цена не может быть отрицательной" }
+        db.withTransaction {
+            val current = stockDao.purchase(id) ?: return@withTransaction
+            val used = current.quantity - current.remaining
+            require(quantity >= used) {
+                "Из этой закупки уже списано ${"%.1f".format(used)} — количество не может быть меньше"
+            }
+            stockDao.updatePurchase(
+                current.copy(
+                    purchasedAt = purchasedAt,
+                    quantity = quantity,
+                    totalPrice = totalPrice,
+                    remaining = quantity - used,
+                )
+            )
+        }
+    }
+
+    /** Удаляет закупку. Возвращает false, если из неё уже что-то списано в варку. */
+    suspend fun deletePurchase(id: Long): Boolean = db.withTransaction {
+        if (stockDao.usageCount(id) > 0) return@withTransaction false
+        stockDao.deletePurchase(id)
+        true
+    }
+
+    /** Меняет название, объём и состав рецепта. Уже сваренные партии не меняются. */
+    suspend fun updateRecipe(recipe: Recipe, items: Map<Long, Double>) {
+        require(recipe.name.isNotBlank()) { "Укажи название рецепта" }
+        require(recipe.batchVolumeL > 0) { "Объём должен быть больше нуля" }
+        require(items.isNotEmpty()) { "Добавь хотя бы один ингредиент" }
+
+        db.withTransaction {
+            recipeDao.update(recipe.copy(name = recipe.name.trim()))
+            recipeDao.deleteItems(recipe.id)
+            recipeDao.insertItems(
+                items.map { (ingredientId, amount) ->
+                    RecipeItem(recipeId = recipe.id, ingredientId = ingredientId, amount = amount)
+                }
+            )
+        }
+    }
+
+    /** Удаляет рецепт. Партии, сваренные по нему, остаются, но теряют ссылку на рецепт. */
+    suspend fun deleteRecipe(recipeId: Long) {
+        db.withTransaction {
+            recipeDao.detachBatches(recipeId)
+            recipeDao.deleteRecipe(recipeId)
+        }
+    }
+
     suspend fun dueStages(until: Long): List<DueStage> = batchDao.dueStages(until)
 }

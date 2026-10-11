@@ -35,6 +35,8 @@ class Converters {
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
 
+    abstract fun recipeDao(): RecipeDao
+
     companion object {
         @Volatile
         private var instance: AppDatabase? = null
@@ -45,7 +47,11 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "alcohol.db",
-                ).build().also { instance = it }
+                )
+                    // Версию схемы поднимаем при любом изменении таблиц и пишем миграцию.
+                    // Без неё Room не откроет старую базу, и данные не пропадут молча.
+                    .build()
+                    .also { instance = it }
             }
     }
 }

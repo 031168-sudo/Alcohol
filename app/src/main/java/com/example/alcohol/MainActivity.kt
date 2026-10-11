@@ -3,9 +3,8 @@ package com.example.alcohol
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -14,13 +13,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.example.alcohol.data.DrinkType
+import com.example.alcohol.ui.RecipeCostScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -44,27 +41,17 @@ private val drinkTabs = listOf(
 fun DrinkTabs() {
     var selected by remember { mutableIntStateOf(0) }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxSize()) {
-            TabRow(selectedTabIndex = selected) {
-                drinkTabs.forEachIndexed { index, (title, _) ->
-                    Tab(
-                        selected = selected == index,
-                        onClick = { selected = index },
-                        text = { Text(title) },
-                    )
-                }
-            }
-            // Экраны рецептов, партий и себестоимости добавим на следующих шагах.
-            val current = drinkTabs[selected].second
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("Раздел: ${drinkTabs[selected].first} (${current.name})")
+    Column(modifier = Modifier.fillMaxSize()) {
+        TabRow(selectedTabIndex = selected) {
+            drinkTabs.forEachIndexed { index, (title, _) ->
+                Tab(
+                    selected = selected == index,
+                    onClick = { selected = index },
+                    text = { Text(title) },
+                )
             }
         }
+        // Пока показываем только себестоимость. Экраны партий и напоминаний добавим позже.
+        RecipeCostScreen(drinkType = drinkTabs[selected].second)
     }
 }

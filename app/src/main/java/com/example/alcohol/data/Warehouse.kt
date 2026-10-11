@@ -154,7 +154,8 @@ class Warehouse(private val db: AppDatabase) {
             val plans = mutableListOf<Pair<Long, AllocationResult>>()
 
             for ((ingredientId, amount) in needs) {
-                val open = stockDao.openPurchases(ingredientId)
+                // Только закупки, сделанные к дате варки.
+                val open = stockDao.openPurchasesUntil(ingredientId, startedAt)
                 open.forEach { purchases[it.id] = it }
                 val lots = open.map { Lot(it.id, it.remaining, it.totalPrice / it.quantity) }
 
@@ -293,6 +294,11 @@ class Warehouse(private val db: AppDatabase) {
             val used = current.quantity - current.remaining
             require(quantity >= used) {
                 "Из этой закупки уже списано ${"%.1f".format(used)} — количество не может быть меньше"
+            }
+            // Нельзя отнести закупку на дату позже варки, где она уже списана.
+            val firstUse = stockDao.earliestUsageOf(id)
+            require(firstUse == null || purchasedAt <= firstUse) {
+                "Эта закупка уже списана в варку, которая была раньше новой даты"
             }
             stockDao.updatePurchase(
                 current.copy(

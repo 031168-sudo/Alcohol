@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Icon
@@ -69,12 +70,22 @@ fun BatchDetailScreen(batchId: Long, onBack: () -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(enabled = done == null) { completing = stage },
+                // Выполненные этапы подсвечены зелёным, невыполненные — нейтральным.
+                colors = if (done != null) {
+                    CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                } else {
+                    CardDefaults.cardColors()
+                },
             ) {
                 Row(modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp, end = 4.dp)) {
                     Column(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
                         Text(stageTitle(stage.type), style = MaterialTheme.typography.titleSmall)
                         if (done != null) {
-                            Text("Выполнено ${formatDate(done)}", style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                            "✓ Выполнено ${formatDate(done)}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                             val details = listOfNotNull(
                                 stage.temperatureC?.let { "%.1f °C".format(it) },
                                 stage.gravity?.let { "%.1f %%".format(it) },
@@ -132,11 +143,10 @@ private fun CompleteStageDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                OutlinedTextField(
+                DateField(
+                    label = "Дата (дд.мм.гггг)",
                     value = dateText,
                     onValueChange = { dateText = it },
-                    label = { Text("Дата (дд.мм.гггг)") },
-                    singleLine = true,
                 )
                 OutlinedTextField(
                     value = tempText,

@@ -82,6 +82,20 @@ interface StockDao {
     )
     suspend fun openPurchases(ingredientId: Long): List<Purchase>
 
+    /** Открытые закупки, сделанные не позже даты варки: более поздние в эту варку не попадают. */
+    @Query(
+        "SELECT * FROM purchases WHERE ingredientId = :ingredientId AND remaining > 0 " +
+            "AND purchasedAt <= :until ORDER BY purchasedAt, id"
+    )
+    suspend fun openPurchasesUntil(ingredientId: Long, until: Long): List<Purchase>
+
+    /** Самая ранняя варка, в которой списана закупка. Null, если не списывалась. */
+    @Query(
+        "SELECT MIN(b.startedAt) FROM batch_ingredients bi " +
+            "JOIN batches b ON b.id = bi.batchId WHERE bi.purchaseId = :purchaseId"
+    )
+    suspend fun earliestUsageOf(purchaseId: Long): Long?
+
     @Query("UPDATE purchases SET remaining = :remaining WHERE id = :purchaseId")
     suspend fun setRemaining(purchaseId: Long, remaining: Double)
 

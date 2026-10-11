@@ -1,6 +1,8 @@
 package com.example.alcohol.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -9,9 +11,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -26,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.Row
 import com.example.alcohol.data.AppDatabase
 import com.example.alcohol.data.BatchStage
 import com.example.alcohol.data.Warehouse
@@ -64,19 +70,27 @@ fun BatchDetailScreen(batchId: Long, onBack: () -> Unit) {
                     .fillMaxWidth()
                     .clickable(enabled = done == null) { completing = stage },
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(stageTitle(stage.type), style = MaterialTheme.typography.titleSmall)
+                Row(modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp, end = 4.dp)) {
+                    Column(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
+                        Text(stageTitle(stage.type), style = MaterialTheme.typography.titleSmall)
+                        if (done != null) {
+                            Text("Выполнено ${formatDate(done)}", style = MaterialTheme.typography.bodyMedium)
+                            val details = listOfNotNull(
+                                stage.temperatureC?.let { "%.1f °C".format(it) },
+                                stage.gravity?.let { "%.1f %%".format(it) },
+                                stage.notes.takeIf { it.isNotBlank() },
+                            ).joinToString(" · ")
+                            if (details.isNotEmpty()) Text(details, style = MaterialTheme.typography.bodySmall)
+                        } else {
+                            val planned = stage.plannedAt?.let { formatDate(it) } ?: "не запланировано"
+                            Text("Прогноз: $planned. Нажми, чтобы отметить.", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    // Выполненный этап можно поправить: дату, температуру, плотность, заметки.
                     if (done != null) {
-                        Text("Выполнено ${formatDate(done)}", style = MaterialTheme.typography.bodyMedium)
-                        val details = listOfNotNull(
-                            stage.temperatureC?.let { "%.1f °C".format(it) },
-                            stage.gravity?.let { "%.3f SG".format(it) },
-                            stage.notes.takeIf { it.isNotBlank() },
-                        ).joinToString(" · ")
-                        if (details.isNotEmpty()) Text(details, style = MaterialTheme.typography.bodySmall)
-                    } else {
-                        val planned = stage.plannedAt?.let { formatDate(it) } ?: "не запланировано"
-                        Text("Прогноз: $planned. Нажми, чтобы отметить.", style = MaterialTheme.typography.bodyMedium)
+                        IconButton(onClick = { completing = stage }) {
+                            Icon(Icons.Default.Edit, contentDescription = "Изменить этап")
+                        }
                     }
                 }
             }
@@ -103,17 +117,21 @@ private fun CompleteStageDialog(
     onDismiss: () -> Unit,
     onSave: (doneAt: Long, temperatureC: Double?, gravity: Double?, notes: String) -> Unit,
 ) {
-    var dateText by remember { mutableStateOf(formatDate(System.currentTimeMillis())) }
-    var tempText by remember { mutableStateOf("") }
-    var gravityText by remember { mutableStateOf("") }
-    var notes by remember { mutableStateOf("") }
+    var dateText by remember { mutableStateOf(formatDate(stage.doneAt ?: System.currentTimeMillis())) }
+    var tempText by remember { mutableStateOf(stage.temperatureC?.toString() ?: "") }
+    var gravityText by remember { mutableStateOf(stage.gravity?.toString() ?: "") }
+    var notes by remember { mutableStateOf(stage.notes) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    AlertDialog(
+    FormDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stageTitle(stage.type)) },
+        message = error,
+        title = { Text(if (stage.doneAt == null) stageTitle(stage.type) else "Изменить: ${stageTitle(stage.type)}") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 OutlinedTextField(
                     value = dateText,
                     onValueChange = { dateText = it },
@@ -129,7 +147,7 @@ private fun CompleteStageDialog(
                 OutlinedTextField(
                     value = gravityText,
                     onValueChange = { gravityText = it },
-                    label = { Text("Плотность SG (необязательно)") },
+                    label = { Text("Плотность, % (необязательно)") },
                     singleLine = true,
                 )
                 OutlinedTextField(
@@ -137,7 +155,6 @@ private fun CompleteStageDialog(
                     onValueChange = { notes = it },
                     label = { Text("Заметки") },
                 )
-                error?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             }
         },
         confirmButton = {

@@ -19,7 +19,7 @@ import com.example.alcohol.data.DrinkType
 @Composable
 fun Modifier.drinkBackdrop(drinkType: DrinkType): Modifier {
     val tile = ImageBitmap.imageResource(
-        if (drinkType == DrinkType.BEER) R.drawable.hop_pattern else R.drawable.apple_pattern,
+        if (drinkType == DrinkType.BEER) R.drawable.beer_pattern else R.drawable.apple_pattern,
     )
     val brush = ShaderBrush(ImageShader(tile, TileMode.Repeated, TileMode.Repeated))
     return this.drawBehind {

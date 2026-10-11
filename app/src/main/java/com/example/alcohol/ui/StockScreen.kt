@@ -41,6 +41,7 @@ import com.example.alcohol.data.Category
 import com.example.alcohol.data.Purchase
 import com.example.alcohol.data.StockRow
 import com.example.alcohol.data.Warehouse
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @Composable
@@ -414,9 +415,9 @@ private fun PurchaseDialog(warehouse: Warehouse, existing: Purchase? = null, onD
                 val quantity = quantityText.replace(',', '.').toDoubleOrNull()
                 val price = priceText.replace(',', '.').toDoubleOrNull()
                 val purchasedAt = parseDate(dateText)
+                error = null
                 when {
                     existing == null && name.isBlank() -> error = "Укажи название"
-                    existing == null && selected == null -> error = "Сначала создай категорию"
                     existing == null && unit.isBlank() -> error = "Укажи единицу измерения"
                     quantity == null || quantity <= 0 -> error = "Количество должно быть больше нуля"
                     price == null || price < 0 -> error = "Укажи сумму покупки"
@@ -425,10 +426,17 @@ private fun PurchaseDialog(warehouse: Warehouse, existing: Purchase? = null, onD
                         try {
                             if (existing != null) {
                                 warehouse.updatePurchase(existing.id, purchasedAt, quantity, price)
-                            } else if (selected != null) {
+                            } else {
+                                // Категорию читаем заново в момент сохранения, а не из снимка экрана.
+                                val all = warehouse.categories().first()
+                                val chosen = all.firstOrNull { it.id == categoryId } ?: all.firstOrNull()
+                                if (chosen == null) {
+                                    error = "Сначала создай категорию"
+                                    return@launch
+                                }
                                 warehouse.purchase(
                                     name = name,
-                                    categoryId = selected.id,
+                                    categoryId = chosen.id,
                                     unit = unit,
                                     quantity = quantity,
                                     totalPrice = price,

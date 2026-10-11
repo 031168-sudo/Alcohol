@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.Flow
 data class StockRow(
     val ingredientId: Long,
     val name: String,
+    val categoryId: Long,
     val category: String,
     val unit: String,
     val remaining: Double,
@@ -20,7 +21,8 @@ interface StockDao {
 
     @Query(
         """
-        SELECT i.id AS ingredientId, i.name AS name, c.name AS category, i.unit AS unit,
+        SELECT i.id AS ingredientId, i.name AS name, i.categoryId AS categoryId,
+               c.name AS category, i.unit AS unit,
                COALESCE(SUM(p.remaining), 0) AS remaining
         FROM ingredients i
         JOIN categories c ON c.id = i.categoryId
@@ -46,6 +48,29 @@ interface StockDao {
 
     @Query("DELETE FROM ingredients WHERE id = :ingredientId")
     suspend fun deleteIngredient(ingredientId: Long)
+
+    @Query("SELECT * FROM ingredients WHERE id = :id")
+    suspend fun ingredient(id: Long): Ingredient?
+
+    @Update
+    suspend fun updateIngredient(ingredient: Ingredient)
+
+    /** Сколько раз позиция уже списана в варки. */
+    @Query("SELECT COUNT(*) FROM batch_ingredients WHERE ingredientId = :ingredientId")
+    suspend fun batchUsageOf(ingredientId: Long): Int
+
+    @Query("UPDATE purchases SET ingredientId = :to WHERE ingredientId = :from")
+    suspend fun movePurchases(from: Long, to: Long)
+
+    @Query("UPDATE batch_ingredients SET ingredientId = :to WHERE ingredientId = :from")
+    suspend fun moveBatchUsage(from: Long, to: Long)
+
+    /** Строки рецептов, которые дублируются у целевой позиции, пропускаются и удаляются ниже. */
+    @Query("UPDATE OR IGNORE recipe_items SET ingredientId = :to WHERE ingredientId = :from")
+    suspend fun moveRecipeItems(from: Long, to: Long)
+
+    @Query("DELETE FROM recipe_items WHERE ingredientId = :ingredientId")
+    suspend fun deleteRecipeItemsOf(ingredientId: Long)
 
     @Insert
     suspend fun insertPurchase(purchase: Purchase): Long

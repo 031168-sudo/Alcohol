@@ -237,6 +237,44 @@ class Warehouse(private val db: AppDatabase) {
         }
     }
 
+    /**
+     * Меняет название, категорию или единицу позиции склада.
+     * Если в новой категории уже есть позиция с таким названием, обе объединяются:
+     * закупки, списания и рецепты переходят к ней (единица у них должна совпадать).
+     * Единицу нельзя менять, если позиция уже используется в рецептах или варках.
+     */
+    suspend fun updateIngredient(id: Long, name: String, categoryId: Long, unit: String) {
+        val cleanName = name.trim()
+        val cleanUnit = unit.trim()
+        require(cleanName.isNotEmpty()) { "Укажи название" }
+        require(cleanUnit.isNotEmpty()) { "Укажи единицу измерения" }
+
+        db.withTransaction {
+            val current = stockDao.ingredient(id) ?: return@withTransaction
+            if (cleanUnit != current.unit) {
+                require(stockDao.batchUsageOf(id) == 0 && stockDao.recipeUsageOf(id) == 0) {
+                    "Единицу нельзя менять: позиция уже используется в рецептах или варках"
+                }
+            }
+
+            val twin = stockDao.findIngredient(cleanName, categoryId)?.takeIf { it.id != id }
+            if (twin == null) {
+                stockDao.updateIngredient(
+                    current.copy(name = cleanName, categoryId = categoryId, unit = cleanUnit)
+                )
+            } else {
+                require(twin.unit == cleanUnit) {
+                    "В этой категории уже есть «$cleanName» в единицах «${twin.unit}»"
+                }
+                stockDao.movePurchases(from = id, to = twin.id)
+                stockDao.moveBatchUsage(from = id, to = twin.id)
+                stockDao.moveRecipeItems(from = id, to = twin.id)
+                stockDao.deleteRecipeItemsOf(id)
+                stockDao.deleteIngredient(id)
+            }
+        }
+    }
+
     /** Закупки ингредиента, новые сверху. */
     fun purchasesOf(ingredientId: Long): Flow<List<Purchase>> = stockDao.purchasesOf(ingredientId)
 

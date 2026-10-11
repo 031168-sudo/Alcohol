@@ -123,6 +123,89 @@ fun StockScreen() {
     }
 }
 
+/** Позиция склада: название, категория и единица. Закупки при этом не меняются. */
+@Composable
+private fun IngredientDialog(
+    warehouse: Warehouse,
+    row: StockRow,
+    onDismiss: () -> Unit,
+    onSaved: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val categories by warehouse.categories().collectAsState(initial = emptyList())
+
+    var name by remember { mutableStateOf(row.name) }
+    var categoryId by remember { mutableStateOf(row.categoryId) }
+    var categoryMenuOpen by remember { mutableStateOf(false) }
+    var unit by remember { mutableStateOf(row.unit) }
+    var unitMenuOpen by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    val category = categories.firstOrNull { it.id == categoryId }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Позиция склада") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Название") },
+                    singleLine = true,
+                )
+                Column {
+                    OutlinedButton(onClick = { categoryMenuOpen = true }) {
+                        Text("Категория: ${category?.name ?: "нет категорий"}")
+                    }
+                    DropdownMenu(expanded = categoryMenuOpen, onDismissRequest = { categoryMenuOpen = false }) {
+                        categories.forEach { c ->
+                            DropdownMenuItem(
+                                text = { Text(c.name) },
+                                onClick = {
+                                    categoryId = c.id
+                                    categoryMenuOpen = false
+                                },
+                            )
+                        }
+                    }
+                }
+                Column {
+                    OutlinedButton(onClick = { unitMenuOpen = true }) { Text("Единица: $unit") }
+                    DropdownMenu(expanded = unitMenuOpen, onDismissRequest = { unitMenuOpen = false }) {
+                        stockUnits.forEach { u ->
+                            DropdownMenuItem(
+                                text = { Text(u) },
+                                onClick = {
+                                    unit = u
+                                    unitMenuOpen = false
+                                },
+                            )
+                        }
+                    }
+                }
+                error?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                scope.launch {
+                    try {
+                        warehouse.updateIngredient(row.ingredientId, name, categoryId, unit)
+                        onSaved()
+                    } catch (e: IllegalArgumentException) {
+                        error = e.message
+                    }
+                }
+            }) { Text("Сохранить") }
+        },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Отмена") } },
+    )
+}
+
 /** Единицы измерения для склада. Выбираются из списка. */
 private val stockUnits = listOf("г", "кг", "мл", "л", "шт.")
 
@@ -133,6 +216,7 @@ private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -
     val purchases by warehouse.purchasesOf(row.ingredientId).collectAsState(initial = emptyList())
 
     var editing by remember { mutableStateOf<Purchase?>(null) }
+    var editingIngredient by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
@@ -143,6 +227,16 @@ private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Text(
+                        "${row.category} · ${row.unit}",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    IconButton(onClick = { editingIngredient = true }) {
+                        Icon(Icons.Default.Edit, contentDescription = "Изменить позицию")
+                    }
+                }
                 if (purchases.isEmpty()) {
                     Text("Закупок пока нет")
                 }
@@ -187,6 +281,16 @@ private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -
             warehouse = warehouse,
             existing = purchase,
             onDismiss = { editing = null },
+        )
+    }
+
+    if (editingIngredient) {
+        IngredientDialog(
+            warehouse = warehouse,
+            row = row,
+            onDismiss = { editingIngredient = false },
+            // Позиция могла слиться с другой и исчезнуть, поэтому закрываем и этот список.
+            onSaved = onDismiss,
         )
     }
 }

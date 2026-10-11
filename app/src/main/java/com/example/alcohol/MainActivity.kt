@@ -29,11 +29,14 @@ import com.example.alcohol.data.DrinkType
 import com.example.alcohol.notify.ensureChannel
 import com.example.alcohol.notify.scheduleStageReminders
 import com.example.alcohol.ui.AlcoholTheme
+import com.example.alcohol.ui.CrashDialog
+import com.example.alcohol.ui.CrashReport
 import com.example.alcohol.ui.DrinkScreen
 import com.example.alcohol.ui.StockScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        CrashReport.install(this)
         // Контент рисуется под системными панелями; отступы задаёт Scaffold через safeDrawing.
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -43,6 +46,7 @@ class MainActivity : ComponentActivity() {
             // Пастельная зелёная палитра; светлая или тёмная по системной теме.
             AlcoholTheme {
                 NotificationPermission()
+                CrashDialog()
                 Scaffold(
                     contentWindowInsets = WindowInsets.safeDrawing,
                 ) { innerPadding ->

@@ -108,6 +108,7 @@ private fun PurchaseDialog(warehouse: Warehouse, onDismiss: () -> Unit) {
     var unit by remember { mutableStateOf("г") }
     var quantityText by remember { mutableStateOf("") }
     var priceText by remember { mutableStateOf("") }
+    var dateText by remember { mutableStateOf(formatDate(System.currentTimeMillis())) }
     var error by remember { mutableStateOf<String?>(null) }
 
     val selected: Category? = categories.firstOrNull { it.id == categoryId } ?: categories.firstOrNull()
@@ -160,6 +161,12 @@ private fun PurchaseDialog(warehouse: Warehouse, onDismiss: () -> Unit) {
                     label = { Text("Сумма покупки, ₽") },
                     singleLine = true,
                 )
+                OutlinedTextField(
+                    value = dateText,
+                    onValueChange = { dateText = it },
+                    label = { Text("Дата закупки (дд.мм.гггг)") },
+                    singleLine = true,
+                )
                 error?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             }
         },
@@ -167,12 +174,14 @@ private fun PurchaseDialog(warehouse: Warehouse, onDismiss: () -> Unit) {
             Button(onClick = {
                 val quantity = quantityText.replace(',', '.').toDoubleOrNull()
                 val price = priceText.replace(',', '.').toDoubleOrNull()
+                val purchasedAt = parseDate(dateText)
                 when {
                     name.isBlank() -> error = "Укажи название"
                     selected == null -> error = "Сначала создай категорию"
                     unit.isBlank() -> error = "Укажи единицу измерения"
                     quantity == null || quantity <= 0 -> error = "Количество должно быть больше нуля"
                     price == null || price < 0 -> error = "Укажи сумму покупки"
+                    purchasedAt == null -> error = "Дата в формате дд.мм.гггг"
                     else -> scope.launch {
                         warehouse.purchase(
                             name = name,
@@ -180,7 +189,7 @@ private fun PurchaseDialog(warehouse: Warehouse, onDismiss: () -> Unit) {
                             unit = unit,
                             quantity = quantity,
                             totalPrice = price,
-                            purchasedAt = System.currentTimeMillis(),
+                            purchasedAt = purchasedAt,
                         )
                         onDismiss()
                     }

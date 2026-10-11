@@ -47,6 +47,7 @@ fun BrewDialog(
 
     val amounts = remember { mutableStateMapOf<Long, String>() }
     var volumeText by remember { mutableStateOf(recipe.batchVolumeL.toString()) }
+    var dateText by remember { mutableStateOf(formatDate(System.currentTimeMillis())) }
     var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(recipe.id) {
@@ -65,6 +66,12 @@ fun BrewDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                OutlinedTextField(
+                    value = dateText,
+                    onValueChange = { dateText = it },
+                    label = { Text("Дата варки (дд.мм.гггг)") },
+                    singleLine = true,
+                )
                 OutlinedTextField(
                     value = volumeText,
                     onValueChange = { volumeText = it },
@@ -87,12 +94,17 @@ fun BrewDialog(
         confirmButton = {
             Button(onClick = {
                 val volume = volumeText.replace(',', '.').toDoubleOrNull()
+                val brewedAt = parseDate(dateText)
                 val needs = amounts
                     .mapNotNull { (id, text) ->
                         text.replace(',', '.').toDoubleOrNull()?.takeIf { it > 0 }?.let { id to it }
                     }
                     .toMap()
 
+                if (brewedAt == null) {
+                    error = "Дата варки в формате дд.мм.гггг"
+                    return@Button
+                }
                 if (volume == null || volume <= 0) {
                     error = "Укажи объём"
                     return@Button
@@ -104,11 +116,11 @@ fun BrewDialog(
 
                 scope.launch {
                     when (val result = warehouse.brew(
-                        name = "${recipe.name} · ${formatDate(System.currentTimeMillis())}",
+                        name = "${recipe.name} · ${formatDate(brewedAt)}",
                         drinkType = drinkType,
                         recipeId = recipe.id,
                         volumeL = volume,
-                        startedAt = System.currentTimeMillis(),
+                        startedAt = brewedAt,
                         needs = needs,
                     )) {
                         is BrewResult.Brewed -> onBrewed(result.batchId)

@@ -17,7 +17,7 @@ class StageTemplatesTest {
 
         assertEquals(setOf(StageType.PRIMARY, StageType.BOTTLING), plan.keys)
         assertEquals(start, plan.getValue(StageType.PRIMARY))
-        assertEquals(start + 32 * day, plan.getValue(StageType.BOTTLING))
+        assertEquals(start + 8 * day, plan.getValue(StageType.BOTTLING))
     }
 
     @Test
@@ -25,7 +25,7 @@ class StageTemplatesTest {
         val actual = start + 3 * day   // поставили на три дня позже
         val replanned = StageTemplates.replan(DrinkType.BEER, StageType.PRIMARY, actual)
 
-        assertEquals(actual + 32 * day, replanned.getValue(StageType.BOTTLING))
+        assertEquals(actual + 8 * day, replanned.getValue(StageType.BOTTLING))
         assertFalse(replanned.containsKey(StageType.PRIMARY))
     }
 

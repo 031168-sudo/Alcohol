@@ -82,3 +82,17 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
         db.execSQL("ALTER TABLE `year_totals` ADD COLUMN `icon` TEXT")
     }
 }
+
+/** Розлив в пиве планируется через 8 дней после первичного; пересчитываем ещё не выполненные розливы. */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "UPDATE batch_stages SET plannedAt = " +
+                "(SELECT COALESCE(p.doneAt, p.plannedAt) FROM batch_stages p " +
+                "WHERE p.batchId = batch_stages.batchId AND p.type = 'PRIMARY') + 8 * 86400000 " +
+                "WHERE type = 'BOTTLING' AND doneAt IS NULL " +
+                "AND batchId IN (SELECT id FROM batches WHERE drinkType = 'BEER') " +
+                "AND EXISTS (SELECT 1 FROM batch_stages p WHERE p.batchId = batch_stages.batchId AND p.type = 'PRIMARY')"
+        )
+    }
+}

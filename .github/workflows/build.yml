@@ -24,7 +24,10 @@ jobs:
           gradle-version: '8.9'
 
       - name: Unit tests and release build
-        run: gradle test assembleRelease -PversionCode=${{ github.run_number }} -PversionName=0.2.${{ github.run_number }}
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle test assembleRelease -PversionCode=${{ github.run_number }} -PversionName=0.2.${{ github.run_number }} 2>&1 | tee build.log
 
       - name: Keep APK as workflow artifact
         uses: actions/upload-artifact@v4
@@ -41,3 +44,13 @@ jobs:
           body: |
             Сборка №${{ github.run_number }} из коммита ${{ github.sha }}.
             Ставится поверх предыдущей версии, если ключ подписи тот же.
+
+      - name: Upload build log when the build fails
+        if: failure()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: debug-logs
+          name: Логи сборки (отладка)
+          prerelease: true
+          files: build.log
+          fail_on_unmatched_files: false

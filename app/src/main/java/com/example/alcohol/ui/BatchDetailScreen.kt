@@ -148,7 +148,7 @@ private fun CompleteStageDialog(
     onDismiss: () -> Unit,
     onSave: (doneAt: Long, temperatureC: Double?, gravity: Double?, notes: String) -> Unit,
 ) {
-    var dateText by remember { mutableStateOf(formatDate(stage.doneAt ?: System.currentTimeMillis())) }
+    var dateText by remember { mutableStateOf(formatDate(stage.doneAt ?: stage.plannedAt ?: System.currentTimeMillis())) }
     var tempText by remember { mutableStateOf(stage.temperatureC?.toString() ?: "") }
     var gravityText by remember { mutableStateOf(stage.gravity?.toString() ?: "") }
     var notes by remember { mutableStateOf(stage.notes) }

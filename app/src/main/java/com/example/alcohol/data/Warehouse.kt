@@ -75,6 +75,23 @@ class Warehouse(private val db: AppDatabase) {
 
     /** Добавляет итог за год. Себестоимость за единицу потом считается как сумма / количество. */
     suspend fun addYearTotal(year: Int, name: String, quantity: Double, unit: String, totalCost: Double, icon: String?) {
+        yearTotalDao.insert(validatedYearTotal(0, year, name, quantity, unit, totalCost, icon))
+    }
+
+    /** Меняет итог за год: название, количество, единицу, сумму и пиктограмму. */
+    suspend fun updateYearTotal(id: Long, year: Int, name: String, quantity: Double, unit: String, totalCost: Double, icon: String?) {
+        yearTotalDao.update(validatedYearTotal(id, year, name, quantity, unit, totalCost, icon))
+    }
+
+    private fun validatedYearTotal(
+        id: Long,
+        year: Int,
+        name: String,
+        quantity: Double,
+        unit: String,
+        totalCost: Double,
+        icon: String?,
+    ): YearTotal {
         val cleanName = name.trim()
         val cleanUnit = unit.trim()
         require(cleanName.isNotEmpty()) { "Укажи название" }
@@ -82,15 +99,14 @@ class Warehouse(private val db: AppDatabase) {
         require(quantity > 0) { "Количество должно быть больше нуля" }
         require(totalCost >= 0) { "Сумма не может быть отрицательной" }
         require(year in 2000..2100) { "Проверь год" }
-        yearTotalDao.insert(
-            YearTotal(
-                year = year,
-                name = cleanName,
-                quantity = quantity,
-                unit = cleanUnit,
-                totalCost = totalCost,
-                icon = icon?.trim()?.takeIf { it.isNotEmpty() },
-            )
+        return YearTotal(
+            id = id,
+            year = year,
+            name = cleanName,
+            quantity = quantity,
+            unit = cleanUnit,
+            totalCost = totalCost,
+            icon = icon?.trim()?.takeIf { it.isNotEmpty() },
         )
     }
 

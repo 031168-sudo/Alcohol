@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Entity
 import androidx.room.Insert
+import androidx.room.Update
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
@@ -32,6 +33,9 @@ interface YearTotalDao {
 
     @Insert
     suspend fun insert(total: YearTotal): Long
+
+    @Update
+    suspend fun update(total: YearTotal)
 
     @Query("DELETE FROM year_totals WHERE id = :id")
     suspend fun delete(id: Long)

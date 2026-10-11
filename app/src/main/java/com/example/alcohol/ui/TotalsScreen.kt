@@ -16,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.IconButton
@@ -57,6 +58,7 @@ fun TotalsScreen() {
     val custom by warehouse.yearTotals().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     var addingFor by remember { mutableStateOf<Int?>(null) }
+    var editing by remember { mutableStateOf<YearTotal?>(null) }
 
     val years = (beer.map { yearOf(it.batch.startedAt) } +
         cider.map { yearOf(it.batch.startedAt) } +
@@ -86,6 +88,7 @@ fun TotalsScreen() {
                     cider = ciderYear,
                     custom = customYear,
                     onAdd = { addingFor = year },
+                    onEdit = { editing = it },
                     onDelete = { id -> scope.launch { warehouse.deleteYearTotal(id) } },
                 )
             }
@@ -96,7 +99,16 @@ fun TotalsScreen() {
         AddYearTotalDialog(
             warehouse = warehouse,
             year = year,
+            existing = null,
             onDismiss = { addingFor = null },
+        )
+    }
+    editing?.let { total ->
+        AddYearTotalDialog(
+            warehouse = warehouse,
+            year = total.year,
+            existing = total,
+            onDismiss = { editing = null },
         )
     }
 }
@@ -108,6 +120,7 @@ private fun YearCard(
     cider: List<BatchSummary>,
     custom: List<YearTotal>,
     onAdd: () -> Unit,
+    onEdit: (YearTotal) -> Unit,
     onDelete: (Long) -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -126,6 +139,9 @@ private fun YearCard(
                                 "в среднем ${"%.2f".format(total.totalCost / total.quantity)} ₽/${total.unit}",
                             style = MaterialTheme.typography.bodyMedium,
                         )
+                    }
+                    IconButton(onClick = { onEdit(total) }) {
+                        Icon(Icons.Default.Edit, contentDescription = "Изменить итог")
                     }
                     IconButton(onClick = { onDelete(total.id) }) {
                         Icon(Icons.Default.Delete, contentDescription = "Удалить итог")
@@ -169,19 +185,24 @@ private fun IconSlot(emoji: String) {
 }
 
 @Composable
-private fun AddYearTotalDialog(warehouse: Warehouse, year: Int, onDismiss: () -> Unit) {
+private fun AddYearTotalDialog(
+    warehouse: Warehouse,
+    year: Int,
+    existing: YearTotal?,
+    onDismiss: () -> Unit,
+) {
     val scope = rememberCoroutineScope()
-    var name by remember { mutableStateOf("") }
-    var iconText by remember { mutableStateOf("") }
-    var quantityText by remember { mutableStateOf("") }
-    var unit by remember { mutableStateOf("шт.") }
-    var costText by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(existing?.name ?: "") }
+    var iconText by remember { mutableStateOf(existing?.icon ?: "") }
+    var quantityText by remember { mutableStateOf(existing?.quantity?.let { plainNumber(it) } ?: "") }
+    var unit by remember { mutableStateOf(existing?.unit ?: "шт.") }
+    var costText by remember { mutableStateOf(existing?.totalCost?.let { plainNumber(it) } ?: "") }
     var error by remember { mutableStateOf<String?>(null) }
 
     FormDialog(
         onDismissRequest = onDismiss,
         message = error,
-        title = { Text("Итог за $year") },
+        title = { Text(if (existing == null) "Итог за $year" else "Изменить итог") },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -230,7 +251,11 @@ private fun AddYearTotalDialog(warehouse: Warehouse, year: Int, onDismiss: () ->
                         error = null
                         scope.launch {
                             try {
-                                warehouse.addYearTotal(year, name, quantity, unit, cost, iconText)
+                                if (existing == null) {
+                                    warehouse.addYearTotal(year, name, quantity, unit, cost, iconText)
+                                } else {
+                                    warehouse.updateYearTotal(existing.id, year, name, quantity, unit, cost, iconText)
+                                }
                                 onDismiss()
                             } catch (e: IllegalArgumentException) {
                                 error = e.message ?: "Не удалось сохранить"
@@ -248,3 +273,6 @@ private fun yearOf(millis: Long): Int =
     Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).year
 
 private fun yearNow(): Int = java.time.LocalDate.now().year
+
+private fun plainNumber(value: Double): String =
+    if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()

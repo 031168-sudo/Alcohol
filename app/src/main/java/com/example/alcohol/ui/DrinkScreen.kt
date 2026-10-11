@@ -60,7 +60,9 @@ fun DrinkScreen(drinkType: DrinkType) {
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .drinkBackdrop(drinkType, MaterialTheme.colorScheme.primary.copy(alpha = 0.13f)),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {

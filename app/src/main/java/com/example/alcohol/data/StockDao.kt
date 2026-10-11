@@ -5,11 +5,11 @@ import androidx.room.Insert
 import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
 
-/** Строка склада: ингредиент и сколько его осталось по всем закупкам. */
+/** Строка склада: ингредиент, его категория и сколько осталось по всем закупкам. */
 data class StockRow(
     val ingredientId: Long,
     val name: String,
-    val kind: IngredientKind,
+    val category: String,
     val unit: String,
     val remaining: Double,
 )
@@ -19,12 +19,13 @@ interface StockDao {
 
     @Query(
         """
-        SELECT i.id AS ingredientId, i.name AS name, i.kind AS kind, i.unit AS unit,
+        SELECT i.id AS ingredientId, i.name AS name, c.name AS category, i.unit AS unit,
                COALESCE(SUM(p.remaining), 0) AS remaining
         FROM ingredients i
+        JOIN categories c ON c.id = i.categoryId
         LEFT JOIN purchases p ON p.ingredientId = i.id
         GROUP BY i.id
-        ORDER BY i.kind, i.name
+        ORDER BY c.id, i.name
         """
     )
     fun stock(): Flow<List<StockRow>>

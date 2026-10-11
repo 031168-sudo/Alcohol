@@ -6,6 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 class Converters {
     @TypeConverter
@@ -13,12 +14,6 @@ class Converters {
 
     @TypeConverter
     fun stringToDrinkType(value: String): DrinkType = DrinkType.valueOf(value)
-
-    @TypeConverter
-    fun ingredientKindToString(value: IngredientKind): String = value.name
-
-    @TypeConverter
-    fun stringToIngredientKind(value: String): IngredientKind = IngredientKind.valueOf(value)
 
     @TypeConverter
     fun stageTypeToString(value: StageType): String = value.name
@@ -29,6 +24,7 @@ class Converters {
 
 @Database(
     entities = [
+        Category::class,
         Ingredient::class,
         Purchase::class,
         Recipe::class,
@@ -37,7 +33,7 @@ class Converters {
         BatchIngredient::class,
         BatchStage::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -45,6 +41,7 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun recipeDao(): RecipeDao
     abstract fun stockDao(): StockDao
+    abstract fun categoryDao(): CategoryDao
     abstract fun batchDao(): BatchDao
 
     companion object {
@@ -58,9 +55,14 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "alcohol.db",
                 )
-                    // Пока версия 1: приложение ещё не ставилось на телефон, схему можно менять.
-                    // После первой установки любое изменение таблиц требует новой версии и миграции,
-                    // иначе Room не откроет базу, а данные пользователя могут пропасть.
+                    // При любом изменении таблиц поднимаем версию и добавляем миграцию.
+                    // Без миграции Room не откроет базу, но данные при этом не теряются.
+                    .addMigrations(MIGRATION_1_2)
+                    .addCallback(object : RoomDatabase.Callback() {
+                        override fun onCreate(db: SupportSQLiteDatabase) {
+                            db.execSQL(Categories.SEED_SQL)
+                        }
+                    })
                     .build()
                     .also { instance = it }
             }

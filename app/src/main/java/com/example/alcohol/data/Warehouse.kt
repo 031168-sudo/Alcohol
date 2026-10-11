@@ -15,16 +15,51 @@ sealed interface BrewResult {
 }
 
 /**
- * Склад, рецепты, варка и этапы партий.
+ * Склад, категории, рецепты, варка и этапы партий.
  * Закупки пополняют остатки, варка списывает их по FIFO и фиксирует стоимость партии.
  */
 class Warehouse(private val db: AppDatabase) {
 
     private val stockDao = db.stockDao()
+    private val categoryDao = db.categoryDao()
     private val batchDao = db.batchDao()
     private val recipeDao = db.recipeDao()
 
     fun stock(): Flow<List<StockRow>> = stockDao.stock()
+
+    fun categories(): Flow<List<Category>> = categoryDao.all()
+
+    /** Добавляет категорию. Возвращает false, если такое название уже есть. */
+    suspend fun addCategory(name: String): Boolean {
+        val clean = name.trim()
+        require(clean.isNotEmpty()) { "Укажи название категории" }
+        return db.withTransaction {
+            if (categoryDao.countByName(clean) > 0) return@withTransaction false
+            categoryDao.insert(Category(name = clean))
+            true
+        }
+    }
+
+    /** Переименовывает категорию. Возвращает false, если название уже занято. */
+    suspend fun renameCategory(id: Long, name: String): Boolean {
+        val clean = name.trim()
+        require(clean.isNotEmpty()) { "Укажи название категории" }
+        return db.withTransaction {
+            if (categoryDao.countByName(clean) > 0) return@withTransaction false
+            categoryDao.rename(id, clean)
+            true
+        }
+    }
+
+    /**
+     * Удаляет категорию. Возвращает false, если в ней есть ингредиенты:
+     * сначала их нужно перенести в другую категорию.
+     */
+    suspend fun deleteCategory(id: Long): Boolean = db.withTransaction {
+        if (categoryDao.ingredientsInCategory(id) > 0) return@withTransaction false
+        categoryDao.delete(id)
+        true
+    }
 
     fun recipes(type: DrinkType): Flow<List<Recipe>> = recipeDao.recipes(type)
 
@@ -37,24 +72,27 @@ class Warehouse(private val db: AppDatabase) {
     fun stages(batchId: Long): Flow<List<BatchStage>> = batchDao.stages(batchId)
 
     /**
-     * Записывает закупку. Если ингредиента с таким именем ещё нет, создаёт его.
+     * Записывает закупку. Если ингредиента с таким именем ещё нет, создаёт его в выбранной категории.
      * Цена за единицу = totalPrice / quantity.
      */
     suspend fun purchase(
         name: String,
-        kind: IngredientKind,
+        categoryId: Long,
         unit: String,
         quantity: Double,
         totalPrice: Double,
         purchasedAt: Long,
         note: String = "",
     ): Long {
+        require(name.isNotBlank()) { "Укажи название" }
         require(quantity > 0) { "Количество должно быть больше нуля" }
         require(totalPrice >= 0) { "Цена не может быть отрицательной" }
 
         return db.withTransaction {
-            val ingredientId = stockDao.findIngredientByName(name)?.id
-                ?: stockDao.insertIngredient(Ingredient(name = name, kind = kind, unit = unit))
+            val ingredientId = stockDao.findIngredientByName(name.trim())?.id
+                ?: stockDao.insertIngredient(
+                    Ingredient(name = name.trim(), categoryId = categoryId, unit = unit.trim())
+                )
 
             stockDao.insertPurchase(
                 Purchase(

@@ -1,10 +1,8 @@
 package com.example.alcohol.domain
 
-import com.example.alcohol.data.IngredientKind
-
-/** Одна списанная позиция партии: вид ингредиента и её стоимость. */
+/** Одна списанная позиция партии: категория ингредиента и её стоимость. */
 data class CostLine(
-    val kind: IngredientKind,
+    val category: String,
     /** Стоимость списанного, в рублях. */
     val cost: Double,
 )
@@ -15,7 +13,7 @@ data class CostBreakdown(
     /** Себестоимость литра готового напитка, в рублях. */
     val perLiter: Double,
     /** Стоимость по категориям ингредиентов. */
-    val byKind: Map<IngredientKind, Double>,
+    val byCategory: Map<String, Double>,
 )
 
 object CostCalculator {
@@ -23,15 +21,15 @@ object CostCalculator {
     fun calculate(lines: List<CostLine>, batchVolumeL: Double): CostBreakdown {
         require(batchVolumeL > 0) { "Объём партии должен быть больше нуля" }
 
-        val byKind = lines
-            .groupBy { it.kind }
+        val byCategory = lines
+            .groupBy { it.category }
             .mapValues { (_, items) -> items.sumOf { it.cost } }
-        val total = byKind.values.sum()
+        val total = byCategory.values.sum()
 
         return CostBreakdown(
             total = total,
             perLiter = total / batchVolumeL,
-            byKind = byKind,
+            byCategory = byCategory,
         )
     }
 }

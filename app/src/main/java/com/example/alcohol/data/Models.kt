@@ -7,16 +7,21 @@ import androidx.room.PrimaryKey
 
 enum class DrinkType { BEER, CIDER }
 
-enum class IngredientKind { MALT, HOP, YEAST, ADJUNCT, SUGAR, PACKAGING, OTHER }
-
 enum class StageType { MASHING, BOIL, COOLING, PRIMARY, RACKING, SECONDARY, CONDITIONING, BOTTLING, KEGGING }
 
-/** Что есть на складе: вид, единица измерения. Цена и остатки живут в закупках. */
+/** Категория ингредиентов, например «Солод» или «Хмель». Редактируется пользователем. */
+@Entity(tableName = "categories")
+data class Category(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+)
+
+/** Что есть на складе: категория, единица измерения. Цена и остатки живут в закупках. */
 @Entity(tableName = "ingredients")
 data class Ingredient(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
-    val kind: IngredientKind,
+    val categoryId: Long,
     /** Единица измерения: г, мл, шт. */
     val unit: String,
     /** Альфа-кислоты в процентах, только для хмеля. */

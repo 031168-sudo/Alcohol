@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -110,9 +111,18 @@ fun DrinkScreen(drinkType: DrinkType) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { openedBatchId = summary.batch.id },
+                // Разлитые партии подсвечены зелёным, как выполненные этапы.
+                colors = if (summary.bottled) {
+                    CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                } else {
+                    CardDefaults.cardColors()
+                },
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(summary.batch.name, style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        if (summary.bottled) "✓ ${summary.batch.name}" else summary.batch.name,
+                        style = MaterialTheme.typography.titleSmall,
+                    )
                     Text(
                         "${formatDate(summary.batch.startedAt)} · ${summary.batch.volumeL} л",
                         style = MaterialTheme.typography.bodyMedium,

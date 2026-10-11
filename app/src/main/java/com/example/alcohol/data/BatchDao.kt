@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.Flow
 data class BatchSummary(
     @Embedded val batch: Batch,
     val total: Double,
+    /** Розлив (в бутылки или кег) уже отмечен как выполненный. */
+    val bottled: Boolean,
 )
 
 /** Этап, который скоро наступает или уже просрочен, для напоминаний. */
@@ -26,7 +28,11 @@ interface BatchDao {
 
     @Query(
         """
-        SELECT b.*, COALESCE(SUM(bi.cost), 0) AS total
+        SELECT b.*, COALESCE(SUM(bi.cost), 0) AS total,
+            EXISTS (
+                SELECT 1 FROM batch_stages s
+                WHERE s.batchId = b.id AND s.type IN ('BOTTLING', 'KEGGING') AND s.doneAt IS NOT NULL
+            ) AS bottled
         FROM batches b
         LEFT JOIN batch_ingredients bi ON bi.batchId = b.id
         WHERE b.drinkType = :type

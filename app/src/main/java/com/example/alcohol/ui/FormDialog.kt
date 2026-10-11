@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -40,7 +38,7 @@ fun FormDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
     ) {
         // Высота окна диалога не ограничена, поэтому максимум берём от высоты экрана.
-        val maxDialogHeight = LocalConfiguration.current.screenHeightDp.dp
+        val textMaxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.55f
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -48,21 +46,18 @@ fun FormDialog(
             contentAlignment = Alignment.Center,
         ) {
             Surface(
-                modifier = Modifier
-                    .fillMaxWidth(0.92f)
-                    .heightIn(max = maxDialogHeight * 0.8f),
+                modifier = Modifier.fillMaxWidth(0.92f),
                 shape = AlertDialogDefaults.shape,
                 color = AlertDialogDefaults.containerColor,
                 tonalElevation = AlertDialogDefaults.TonalElevation,
             ) {
-                Column(
-                    modifier = Modifier
-                        .padding(24.dp)
-                        .verticalScroll(rememberScrollState()),
-                ) {
+                Column(modifier = Modifier.padding(24.dp)) {
                     title()
                     Spacer(Modifier.height(16.dp))
-                    text()
+                    // Прокрутка внутри text получает явную высоту: без неё окно диалога измеряется без границ и падает.
+                    Box(modifier = Modifier.fillMaxWidth().heightIn(max = textMaxHeight)) {
+                        text()
+                    }
                     Spacer(Modifier.height(24.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),

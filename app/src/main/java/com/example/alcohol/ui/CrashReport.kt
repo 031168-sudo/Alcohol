@@ -2,6 +2,7 @@ package com.example.alcohol.ui
 
 import android.content.Context
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -17,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.unit.dp
 
 /**
  * Запоминает текст последнего необработанного сбоя в файл.
@@ -63,7 +65,7 @@ fun CrashDialog() {
             onDismissRequest = {},
             title = { Text("В прошлый раз приложение упало") },
             text = {
-                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Column(modifier = Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState())) {
                     Text(text, style = MaterialTheme.typography.bodySmall)
                 }
             },

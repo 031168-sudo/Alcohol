@@ -32,35 +32,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.draw.paint
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
-import com.example.alcohol.R
 import com.example.alcohol.data.AppDatabase
 import com.example.alcohol.data.DrinkType
 import com.example.alcohol.data.Recipe
 import com.example.alcohol.data.Warehouse
 import kotlinx.coroutines.launch
-
-/**
- * Фон вкладки: для пива — орнамент с хмелем внизу, для сидра — яблоки по узору.
- */
-@Composable
-private fun Modifier.backdrop(drinkType: DrinkType): Modifier {
-    val primary = MaterialTheme.colorScheme.primary
-    return if (drinkType == DrinkType.BEER) {
-        this.paint(
-            painter = painterResource(R.drawable.hop_ornament),
-            alignment = Alignment.BottomCenter,
-            contentScale = ContentScale.FillWidth,
-            alpha = 0.22f,
-            colorFilter = ColorFilter.tint(primary),
-        )
-    } else {
-        this.drinkBackdrop(drinkType, primary.copy(alpha = 0.13f))
-    }
-}
 
 /** Вкладка «Пиво» или «Сидр»: рецепты для варки, список партий и открытая партия. */
 @Composable
@@ -86,7 +62,7 @@ fun DrinkScreen(drinkType: DrinkType) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .backdrop(drinkType),
+            .drinkBackdrop(drinkType),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {

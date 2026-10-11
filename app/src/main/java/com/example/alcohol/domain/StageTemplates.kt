@@ -18,11 +18,10 @@ object StageTemplates {
     private const val DAY_MS = 24L * 60 * 60 * 1000
 
     fun steps(drinkType: DrinkType): List<StageStep> = when (drinkType) {
+        // Пиво: только первичное брожение и розлив. Розлив — через 32 дня (прежние 8 + 10 + 14).
         DrinkType.BEER -> listOf(
             StageStep(StageType.PRIMARY, 0),
-            StageStep(StageType.RACKING, 8),
-            StageStep(StageType.CONDITIONING, 10),
-            StageStep(StageType.BOTTLING, 14),
+            StageStep(StageType.BOTTLING, 32),
         )
         DrinkType.CIDER -> listOf(
             StageStep(StageType.PRIMARY, 0),

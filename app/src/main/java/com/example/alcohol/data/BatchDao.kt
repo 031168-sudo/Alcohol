@@ -13,6 +13,9 @@ data class BatchSummary(
     val total: Double,
     /** Розлив (в бутылки или кег) уже отмечен как выполненный. */
     val bottled: Boolean,
+    /** Следующий невыполненный этап и его прогнозная дата. Null, если все этапы пройдены. */
+    val nextType: StageType?,
+    val nextPlannedAt: Long?,
 )
 
 /** Этап, который скоро наступает или уже просрочен, для напоминаний. */
@@ -32,7 +35,11 @@ interface BatchDao {
             EXISTS (
                 SELECT 1 FROM batch_stages s
                 WHERE s.batchId = b.id AND s.type IN ('BOTTLING', 'KEGGING') AND s.doneAt IS NOT NULL
-            ) AS bottled
+            ) AS bottled,
+            (SELECT s.type FROM batch_stages s
+                WHERE s.batchId = b.id AND s.doneAt IS NULL ORDER BY s.id LIMIT 1) AS nextType,
+            (SELECT s.plannedAt FROM batch_stages s
+                WHERE s.batchId = b.id AND s.doneAt IS NULL ORDER BY s.id LIMIT 1) AS nextPlannedAt
         FROM batches b
         LEFT JOIN batch_ingredients bi ON bi.batchId = b.id
         WHERE b.drinkType = :type

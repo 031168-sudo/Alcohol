@@ -17,6 +17,9 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -131,6 +134,23 @@ fun DrinkScreen(drinkType: DrinkType) {
                         "Себестоимость: %.0f ₽ · %.1f ₽/л".format(summary.total, perLiter),
                         style = MaterialTheme.typography.bodyLarge,
                     )
+                    // Нижняя строка: что дальше и когда. Зелёным, а красным, если срок уже прошёл.
+                    val next = summary.nextType
+                    if (next != null) {
+                        val planned = summary.nextPlannedAt
+                        val overdue = planned != null &&
+                            Instant.ofEpochMilli(planned).atZone(ZoneId.systemDefault()).toLocalDate()
+                                .isBefore(LocalDate.now())
+                        Text(
+                            "Дальше: ${stageTitle(next)} · ${planned?.let { formatDate(it) } ?: "не запланировано"}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (overdue) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            },
+                        )
+                    }
                 }
             }
         }

@@ -206,6 +206,50 @@ class Warehouse(private val db: AppDatabase) {
     }
 
     /**
+     * Дописывает списания в уже сделанную варку, задним числом.
+     * Закупки берутся только те, что сделаны не позже даты варки.
+     * Возвращает нехватку по ингредиентам; если она пустая, списание записано.
+     */
+    suspend fun addUsage(batchId: Long, needs: Map<Long, Double>): Map<Long, Double> {
+        require(needs.isNotEmpty()) { "Укажи, что списать" }
+        return db.withTransaction {
+            val batch = batchDao.batchOnce(batchId) ?: return@withTransaction emptyMap()
+            val purchases = mutableMapOf<Long, Purchase>()
+            val shortfalls = mutableMapOf<Long, Double>()
+            val plans = mutableListOf<Pair<Long, AllocationResult>>()
+
+            for ((ingredientId, amount) in needs) {
+                val open = stockDao.openPurchasesUntil(ingredientId, batch.startedAt)
+                open.forEach { purchases[it.id] = it }
+                val lots = open.map { Lot(it.id, it.remaining, it.totalPrice / it.quantity) }
+                val result = FifoAllocator.allocate(lots, amount)
+                if (result.shortfall > 0) shortfalls[ingredientId] = result.shortfall
+                plans += ingredientId to result
+            }
+            if (shortfalls.isNotEmpty()) return@withTransaction shortfalls
+
+            val uses = mutableListOf<BatchIngredient>()
+            for ((ingredientId, result) in plans) {
+                for (allocation in result.allocations) {
+                    uses += BatchIngredient(
+                        batchId = batchId,
+                        purchaseId = allocation.purchaseId,
+                        ingredientId = ingredientId,
+                        amount = allocation.amount,
+                        cost = allocation.cost,
+                    )
+                    val current = purchases.getValue(allocation.purchaseId)
+                    val left = current.remaining - allocation.amount
+                    stockDao.setRemaining(allocation.purchaseId, left)
+                    purchases[allocation.purchaseId] = current.copy(remaining = left)
+                }
+            }
+            batchDao.insertUses(uses)
+            emptyMap()
+        }
+    }
+
+    /**
      * Отмечает этап выполненным и пересчитывает прогноз для следующих этапов
      * от фактической даты.
      */

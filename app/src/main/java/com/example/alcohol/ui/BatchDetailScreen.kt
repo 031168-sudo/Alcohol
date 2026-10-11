@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -46,6 +47,7 @@ fun BatchDetailScreen(batchId: Long, onBack: () -> Unit) {
     val batch by warehouse.batch(batchId).collectAsState(initial = null)
     val stages by warehouse.stages(batchId).collectAsState(initial = emptyList())
     var completing by remember { mutableStateOf<BatchStage?>(null) }
+    var addingUsage by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     LazyColumn(
@@ -55,6 +57,9 @@ fun BatchDetailScreen(batchId: Long, onBack: () -> Unit) {
     ) {
         item {
             OutlinedButton(onClick = onBack) { Text("Назад") }
+        }
+        item {
+            OutlinedButton(onClick = { addingUsage = true }) { Text("Дополнить списание") }
         }
         batch?.let { b ->
             item {
@@ -106,6 +111,14 @@ fun BatchDetailScreen(batchId: Long, onBack: () -> Unit) {
                 }
             }
         }
+    }
+
+    if (addingUsage) {
+        AddUsageDialog(
+            warehouse = warehouse,
+            batchId = batchId,
+            onDismiss = { addingUsage = false },
+        )
     }
 
     completing?.let { stage ->
@@ -181,6 +194,67 @@ private fun CompleteStageDialog(
                     notes.trim(),
                 )
             }) { Text("Сохранить") }
+        },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Отмена") } },
+    )
+}
+
+/** Списания, которые забыли записать при варке: расходуются так же, как при варке, по дате варки. */
+@Composable
+private fun AddUsageDialog(warehouse: Warehouse, batchId: Long, onDismiss: () -> Unit) {
+    val stock by warehouse.stock().collectAsState(initial = emptyList())
+    val scope = rememberCoroutineScope()
+    val amounts = remember { mutableStateMapOf<Long, String>() }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    FormDialog(
+        onDismissRequest = onDismiss,
+        message = error,
+        title = { Text("Дополнить списание") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    "Закупки берутся только те, что сделаны не позже даты варки.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                if (stock.isEmpty()) Text("На складе пока пусто.")
+                stock.forEach { row ->
+                    OutlinedTextField(
+                        value = amounts[row.ingredientId] ?: "",
+                        onValueChange = { amounts[row.ingredientId] = it },
+                        label = { Text("${row.name}, ${row.unit}") },
+                        singleLine = true,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val needs = amounts
+                    .mapNotNull { (id, text) ->
+                        text.replace(',', '.').toDoubleOrNull()?.takeIf { it > 0 }?.let { id to it }
+                    }
+                    .toMap()
+                if (needs.isEmpty()) {
+                    error = "Укажи, что списать"
+                    return@Button
+                }
+                error = null
+                scope.launch {
+                    val shortfalls = warehouse.addUsage(batchId, needs)
+                    if (shortfalls.isEmpty()) {
+                        onDismiss()
+                    } else {
+                        error = "Не хватает: " + shortfalls.entries.joinToString(", ") { (id, lack) ->
+                            val row = stock.firstOrNull { it.ingredientId == id }
+                            "${row?.name ?: "#$id"} — ${"%.1f".format(lack)} ${row?.unit ?: ""}"
+                        }
+                    }
+                }
+            }) { Text("Списать") }
         },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Отмена") } },
     )

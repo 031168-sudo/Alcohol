@@ -249,17 +249,6 @@ private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -
     val scope = rememberCoroutineScope()
     // Каждый список грузится отдельно; если загрузка падает, причина видна на экране, а не прячется пустым списком.
     var loadError by remember { mutableStateOf<String?>(null) }
-    var diagnostics by remember { mutableStateOf<String?>(null) }
-    androidx.compose.runtime.LaunchedEffect(row.ingredientId) {
-        diagnostics = try {
-            val (p, w) = warehouse.countsForDiagnostics()
-            "$p и $w"
-        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            "ошибка $e"
-        }
-    }
     val purchases by androidx.compose.runtime.produceState(
         initialValue = emptyList<Purchase>(),
         key1 = row.ingredientId,
@@ -286,23 +275,6 @@ private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -
             loadError = "Списания не загрузились: $e"
         }
     }
-    // Ручные списания: строки одного списания (одна дата и причина) показываются одной строкой.
-    val writeOffGroups = writeOffs
-        .groupBy { it.writtenOffAt to it.reason }
-        .map { (key, rows) ->
-            WriteOffGroup(
-                at = key.first,
-                reason = key.second,
-                amount = rows.sumOf { it.amount },
-                cost = rows.sumOf { it.cost },
-                ids = rows.map { it.id },
-            )
-        }
-    // Закупки и списания одним списком по дате, новые сверху.
-    val ledger: List<LedgerEntry> = (
-        purchases.map { LedgerEntry.Bought(it) } + writeOffGroups.map { LedgerEntry.WrittenOff(it) }
-        ).sortedByDescending { it.at }
-
     var editing by remember { mutableStateOf<Purchase?>(null) }
     var editingIngredient by remember { mutableStateOf(false) }
     var writingOff by remember { mutableStateOf(false) }
@@ -312,6 +284,22 @@ private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -
         onDismissRequest = onDismiss,
         title = { Text(row.name) },
         text = {
+        // Ручные списания: строки одного списания (одна дата и причина) показываются одной строкой.
+        val writeOffGroups = writeOffs
+            .groupBy { it.writtenOffAt to it.reason }
+            .map { (key, rows) ->
+                WriteOffGroup(
+                    at = key.first,
+                    reason = key.second,
+                    amount = rows.sumOf { it.amount },
+                    cost = rows.sumOf { it.cost },
+                    ids = rows.map { it.id },
+                )
+            }
+        // Закупки и списания одним списком по дате, новые сверху.
+        val ledger: List<LedgerEntry> = (
+            purchases.map { LedgerEntry.Bought(it) } + writeOffGroups.map { LedgerEntry.WrittenOff(it) }
+            ).sortedByDescending { it.at }
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -389,11 +377,6 @@ private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -
                     }
                 }
                 message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                Text(
-                    "Диагностика: позиция №${row.ingredientId}, закупок ${purchases.size}, списаний ${writeOffs.size}; " +
-                        "в базе всего закупок и списаний: ${diagnostics ?: "…"}",
-                    style = MaterialTheme.typography.labelSmall,
-                )
             }
         },
         confirmButton = { Button(onClick = onDismiss) { Text("Готово") } },

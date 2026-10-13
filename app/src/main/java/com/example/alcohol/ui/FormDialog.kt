@@ -125,3 +125,24 @@ private fun FormPage(
         }
     }
 }
+
+/** Любое удаление спрашивает подтверждение: «Вы уверены, что хотите удалить?». */
+@Composable
+fun ConfirmDeleteDialog(
+    text: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    FormDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Вы уверены, что хотите удалить?") },
+        text = { Text(text) },
+        confirmButton = {
+            androidx.compose.material3.Button(onClick = {
+                onConfirm()
+                onDismiss()
+            }) { Text("Удалить") }
+        },
+        dismissButton = { androidx.compose.material3.OutlinedButton(onClick = onDismiss) { Text("Отмена") } },
+    )
+}

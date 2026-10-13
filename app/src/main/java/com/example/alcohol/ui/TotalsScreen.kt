@@ -59,6 +59,7 @@ fun TotalsScreen() {
     val scope = rememberCoroutineScope()
     var addingFor by remember { mutableStateOf<Int?>(null) }
     var editing by remember { mutableStateOf<YearTotal?>(null) }
+    var deleting by remember { mutableStateOf<YearTotal?>(null) }
 
     val years = (beer.map { yearOf(it.batch.startedAt) } +
         cider.map { yearOf(it.batch.startedAt) } +
@@ -89,10 +90,18 @@ fun TotalsScreen() {
                     custom = customYear,
                     onAdd = { addingFor = year },
                     onEdit = { editing = it },
-                    onDelete = { id -> scope.launch { warehouse.deleteYearTotal(id) } },
+                    onDelete = { id -> deleting = custom.firstOrNull { it.id == id } },
                 )
             }
         }
+    }
+
+    deleting?.let { total ->
+        ConfirmDeleteDialog(
+            text = "Итог «${total.name}» будет удалён.",
+            onConfirm = { scope.launch { warehouse.deleteYearTotal(total.id) } },
+            onDismiss = { deleting = null },
+        )
     }
 
     addingFor?.let { year ->

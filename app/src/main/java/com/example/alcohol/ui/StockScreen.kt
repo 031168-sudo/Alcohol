@@ -276,6 +276,9 @@ private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -
         }
     }
     var editing by remember { mutableStateOf<Purchase?>(null) }
+    var deletingPurchase by remember { mutableStateOf<Purchase?>(null) }
+    var deletingWriteOff by remember { mutableStateOf<WriteOffGroup?>(null) }
+    var editingWriteOff by remember { mutableStateOf<WriteOffGroup?>(null) }
     var editingIngredient by remember { mutableStateOf(false) }
     var writingOff by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -340,15 +343,7 @@ private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -
                                     IconButton(onClick = { editing = purchase }) {
                                         Icon(Icons.Default.Edit, contentDescription = "Изменить закупку")
                                     }
-                                    IconButton(onClick = {
-                                        scope.launch {
-                                            message = if (warehouse.deletePurchase(purchase.id)) {
-                                                null
-                                            } else {
-                                                "Из этой закупки уже списано в варку, удалить нельзя"
-                                            }
-                                        }
-                                    }) {
+                                    IconButton(onClick = { deletingPurchase = purchase }) {
                                         Icon(Icons.Default.Delete, contentDescription = "Удалить закупку")
                                     }
                                 }
@@ -366,9 +361,10 @@ private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -
                                     style = MaterialTheme.typography.bodySmall,
                                 )
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                    IconButton(onClick = {
-                                        scope.launch { group.ids.forEach { warehouse.deleteWriteOff(it) } }
-                                    }) {
+                                    IconButton(onClick = { editingWriteOff = group }) {
+                                        Icon(Icons.Default.Edit, contentDescription = "Изменить списание")
+                                    }
+                                    IconButton(onClick = { deletingWriteOff = group }) {
                                         Icon(Icons.Default.Delete, contentDescription = "Удалить списание")
                                     }
                                 }
@@ -384,6 +380,34 @@ private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -
 
     if (writingOff) {
         WriteOffDialog(warehouse = warehouse, row = row, onDismiss = { writingOff = false })
+    }
+
+    editingWriteOff?.let { group ->
+        WriteOffDialog(warehouse = warehouse, row = row, existing = group, onDismiss = { editingWriteOff = null })
+    }
+
+    deletingPurchase?.let { purchase ->
+        ConfirmDeleteDialog(
+            text = "Закупка от ${formatDate(purchase.purchasedAt)} будет удалена.",
+            onConfirm = {
+                scope.launch {
+                    message = if (warehouse.deletePurchase(purchase.id)) {
+                        null
+                    } else {
+                        "Из этой закупки уже списано, удалить нельзя"
+                    }
+                }
+            },
+            onDismiss = { deletingPurchase = null },
+        )
+    }
+
+    deletingWriteOff?.let { group ->
+        ConfirmDeleteDialog(
+            text = "Списание от ${formatDate(group.at)} будет удалено, количество вернётся на склад.",
+            onConfirm = { scope.launch { group.ids.forEach { warehouse.deleteWriteOff(it) } } },
+            onDismiss = { deletingWriteOff = null },
+        )
     }
 
     editing?.let { purchase ->
@@ -572,6 +596,7 @@ private fun CategoriesDialog(warehouse: Warehouse, onDismiss: () -> Unit) {
     var editingId by remember { mutableStateOf<Long?>(null) }
     var editText by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
+    var deletingCategory by remember { mutableStateOf<Category?>(null) }
 
     FormDialog(
         onDismissRequest = onDismiss,
@@ -613,13 +638,9 @@ private fun CategoriesDialog(warehouse: Warehouse, onDismiss: () -> Unit) {
                                 editingId = category.id
                                 editText = category.name
                             }) { Icon(Icons.Default.Edit, contentDescription = "Переименовать") }
-                            IconButton(onClick = {
-                                scope.launch {
-                                    val ok = warehouse.deleteCategory(category.id)
-                                    message = if (ok) null
-                                    else "В «${category.name}» есть ингредиенты. Сначала перенеси их."
-                                }
-                            }) { Icon(Icons.Default.Delete, contentDescription = "Удалить категорию") }
+                            IconButton(onClick = { deletingCategory = category }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Удалить категорию")
+                            }
                         }
                     }
                 }
@@ -652,21 +673,40 @@ private fun CategoriesDialog(warehouse: Warehouse, onDismiss: () -> Unit) {
         },
         confirmButton = { Button(onClick = onDismiss) { Text("Готово") } },
     )
+
+    deletingCategory?.let { category ->
+        ConfirmDeleteDialog(
+            text = "Категория «${category.name}» будет удалена.",
+            onConfirm = {
+                scope.launch {
+                    val ok = warehouse.deleteCategory(category.id)
+                    message = if (ok) null
+                    else "В «${category.name}» есть ингредиенты. Сначала перенеси их."
+                }
+            },
+            onDismiss = { deletingCategory = null },
+        )
+    }
 }
 
 /** Ручное списание: количество из позиции, дата не раньше закупок, которые покрывают его. */
 @Composable
-private fun WriteOffDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -> Unit) {
+private fun WriteOffDialog(
+    warehouse: Warehouse,
+    row: StockRow,
+    existing: WriteOffGroup? = null,
+    onDismiss: () -> Unit,
+) {
     val scope = rememberCoroutineScope()
-    var dateText by remember { mutableStateOf(formatDate(System.currentTimeMillis())) }
-    var amountText by remember { mutableStateOf("") }
-    var reason by remember { mutableStateOf("") }
+    var dateText by remember { mutableStateOf(formatDate(existing?.at ?: System.currentTimeMillis())) }
+    var amountText by remember { mutableStateOf(existing?.amount?.plain() ?: "") }
+    var reason by remember { mutableStateOf(existing?.reason ?: "") }
     var error by remember { mutableStateOf<String?>(null) }
 
     FormDialog(
         onDismissRequest = onDismiss,
         message = error,
-        title = { Text("Списать: ${row.name}") },
+        title = { Text(if (existing == null) "Списать: ${row.name}" else "Списание: ${row.name}") },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -702,7 +742,11 @@ private fun WriteOffDialog(warehouse: Warehouse, row: StockRow, onDismiss: () ->
                         error = null
                         scope.launch {
                             try {
-                                val shortfall = warehouse.writeOff(row.ingredientId, at, amount, reason)
+                                val shortfall = if (existing == null) {
+                                    warehouse.writeOff(row.ingredientId, at, amount, reason)
+                                } else {
+                                    warehouse.replaceWriteOff(existing.ids, row.ingredientId, at, amount, reason)
+                                }
                                 if (shortfall > 0) {
                                     error = "Не хватает ${"%.1f".format(shortfall)} ${row.unit}"
                                 } else {
@@ -714,7 +758,7 @@ private fun WriteOffDialog(warehouse: Warehouse, row: StockRow, onDismiss: () ->
                         }
                     }
                 }
-            }) { Text("Списать") }
+            }) { Text(if (existing == null) "Списать" else "Сохранить") }
         },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Отмена") } },
     )

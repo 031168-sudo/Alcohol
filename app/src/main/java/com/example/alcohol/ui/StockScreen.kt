@@ -247,8 +247,32 @@ private fun writeOffLine(date: String, amount: Double, unit: String, cost: Doubl
 @Composable
 private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
-    val purchases by warehouse.purchasesOf(row.ingredientId).collectAsState(initial = emptyList())
-    val writeOffs by warehouse.writeOffsOf(row.ingredientId).collectAsState(initial = emptyList())
+    // Каждый список грузится отдельно; если загрузка падает, причина видна на экране, а не прячется пустым списком.
+    var loadError by remember { mutableStateOf<String?>(null) }
+    val purchases by androidx.compose.runtime.produceState(
+        initialValue = emptyList<Purchase>(),
+        key1 = row.ingredientId,
+    ) {
+        try {
+            warehouse.purchasesOf(row.ingredientId).collect { value = it }
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            loadError = "Закупки не загрузились: $e"
+        }
+    }
+    val writeOffs by androidx.compose.runtime.produceState(
+        initialValue = emptyList<com.example.alcohol.data.WriteOff>(),
+        key1 = row.ingredientId,
+    ) {
+        try {
+            warehouse.writeOffsOf(row.ingredientId).collect { value = it }
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            loadError = "Списания не загрузились: $e"
+        }
+    }
     // Ручные списания: строки одного списания (одна дата и причина) показываются одной строкой.
     val writeOffGroups = writeOffs
         .groupBy { it.writtenOffAt to it.reason }
@@ -292,7 +316,8 @@ private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -
                 OutlinedButton(onClick = { writingOff = true }, modifier = Modifier.fillMaxWidth()) {
                     Text("Списать")
                 }
-                if (ledger.isEmpty()) {
+                loadError?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+                if (ledger.isEmpty() && loadError == null) {
                     Text("Закупок пока нет")
                 }
                 ledger.forEach { entry ->

@@ -112,3 +112,17 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
         )
     }
 }
+
+/** Ресурсы производства (электричество, вода и т.п.): добавляют стоимость к каждому литру напитка. */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `resources` (" +
+                "`id` INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, " +
+                "`drinkType` TEXT NOT NULL, " +
+                "`name` TEXT NOT NULL, " +
+                "`volumeL` REAL NOT NULL, " +
+                "`price` REAL NOT NULL)"
+        )
+    }
+}

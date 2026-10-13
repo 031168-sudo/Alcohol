@@ -29,6 +29,7 @@ class Warehouse(private val db: AppDatabase) {
     private val categoryDao = db.categoryDao()
     private val batchDao = db.batchDao()
     private val yearTotalDao = db.yearTotalDao()
+    private val resourceDao = db.resourceDao()
     private val recipeDao = db.recipeDao()
 
     fun stock(): Flow<List<StockRow>> = stockDao.stock()
@@ -74,6 +75,26 @@ class Warehouse(private val db: AppDatabase) {
     fun batches(type: DrinkType): Flow<List<BatchSummary>> = batchDao.summaries(type)
 
     fun yearTotals(): Flow<List<YearTotal>> = yearTotalDao.all()
+
+    fun resources(type: DrinkType): Flow<List<Resource>> = resourceDao.all(type)
+
+    suspend fun addResource(type: DrinkType, name: String, volumeL: Double, price: Double) {
+        resourceDao.insert(validatedResource(0, type, name, volumeL, price))
+    }
+
+    suspend fun updateResource(id: Long, type: DrinkType, name: String, volumeL: Double, price: Double) {
+        resourceDao.update(validatedResource(id, type, name, volumeL, price))
+    }
+
+    suspend fun deleteResource(id: Long) = resourceDao.delete(id)
+
+    private fun validatedResource(id: Long, type: DrinkType, name: String, volumeL: Double, price: Double): Resource {
+        val clean = name.trim()
+        require(clean.isNotEmpty()) { "Укажи название" }
+        require(volumeL > 0) { "Объём должен быть больше нуля" }
+        require(price >= 0) { "Цена не может быть отрицательной" }
+        return Resource(id = id, drinkType = type, name = clean, volumeL = volumeL, price = price)
+    }
 
     /** Добавляет итог за год. Себестоимость за единицу потом считается как сумма / количество. */
     suspend fun addYearTotal(year: Int, name: String, quantity: Double, unit: String, totalCost: Double, icon: String?) {

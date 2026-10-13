@@ -53,6 +53,7 @@ fun DrinkScreen(drinkType: DrinkType) {
     var openedBatchId by remember { mutableStateOf<Long?>(null) }
     var brewing by remember { mutableStateOf<Recipe?>(null) }
     var showRecipeDialog by remember { mutableStateOf(false) }
+    var showResources by remember { mutableStateOf(false) }
     /** Рецепт, который сейчас редактируем. null — создаём новый. */
     var editingRecipe by remember { mutableStateOf<Recipe?>(null) }
     var deletingRecipe by remember { mutableStateOf<Recipe?>(null) }
@@ -71,10 +72,13 @@ fun DrinkScreen(drinkType: DrinkType) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            Button(onClick = {
-                editingRecipe = null
-                showRecipeDialog = true
-            }) { Text("Новый рецепт") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = {
+                    editingRecipe = null
+                    showRecipeDialog = true
+                }) { Text("Новый рецепт") }
+                OutlinedButton(onClick = { showResources = true }) { Text("Ресурс") }
+            }
         }
 
         item { Text("Рецепты", style = MaterialTheme.typography.titleMedium) }
@@ -156,6 +160,10 @@ fun DrinkScreen(drinkType: DrinkType) {
                 }
             }
         }
+    }
+
+    if (showResources) {
+        ResourcesDialog(warehouse = warehouse, drinkType = drinkType, onDismiss = { showResources = false })
     }
 
     if (showRecipeDialog) {

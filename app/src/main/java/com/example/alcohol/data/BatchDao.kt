@@ -7,7 +7,7 @@ import androidx.room.Query
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
-/** Партия со своей стоимостью, посчитанной по списанным закупкам. */
+/** Партия со своей стоимостью: списанные закупки плюс ресурсы (электричество, вода и т.п.) на её объём. */
 data class BatchSummary(
     @Embedded val batch: Batch,
     val total: Double,
@@ -31,7 +31,10 @@ interface BatchDao {
 
     @Query(
         """
-        SELECT b.*, COALESCE(SUM(bi.cost), 0) AS total,
+        SELECT b.*,
+            COALESCE(SUM(bi.cost), 0) +
+                b.volumeL * COALESCE((SELECT SUM(r.price / r.volumeL) FROM resources r
+                    WHERE r.drinkType = b.drinkType AND r.volumeL > 0), 0) AS total,
             EXISTS (
                 SELECT 1 FROM batch_stages s
                 WHERE s.batchId = b.id AND s.type IN ('BOTTLING', 'KEGGING') AND s.doneAt IS NOT NULL

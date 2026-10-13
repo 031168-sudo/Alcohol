@@ -255,6 +255,13 @@ class Warehouse(private val db: AppDatabase) {
 
     suspend fun batchUsesOnce(batchId: Long): List<BatchIngredient> = batchDao.usesOnce(batchId)
 
+    suspend fun purchasesListOf(ingredientId: Long): List<Purchase> = stockDao.purchasesListOf(ingredientId)
+
+    suspend fun writeOffsListOf(ingredientId: Long): List<WriteOff> = stockDao.writeOffsListOf(ingredientId)
+
+    /** Сколько закупок и списаний в базе всего: для проверки, что данные на месте. */
+    suspend fun countsForDiagnostics(): Pair<Int, Int> = stockDao.purchaseCountAll() to stockDao.writeOffCountAll()
+
     fun writeOffsOf(ingredientId: Long): Flow<List<WriteOff>> = stockDao.writeOffsOf(ingredientId)
 
     fun brewUsageOf(ingredientId: Long): Flow<List<BrewUsageRow>> = stockDao.brewUsageOf(ingredientId)

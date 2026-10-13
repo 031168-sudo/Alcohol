@@ -107,6 +107,19 @@ interface StockDao {
     @Query("SELECT * FROM purchases WHERE ingredientId = :ingredientId ORDER BY purchasedAt DESC, id DESC")
     fun purchasesOf(ingredientId: Long): Flow<List<Purchase>>
 
+    /** Те же закупки ингредиента разовым запросом: для первой загрузки и диагностики. */
+    @Query("SELECT * FROM purchases WHERE ingredientId = :ingredientId ORDER BY purchasedAt DESC, id DESC")
+    suspend fun purchasesListOf(ingredientId: Long): List<Purchase>
+
+    @Query("SELECT * FROM write_offs WHERE ingredientId = :ingredientId ORDER BY writtenOffAt DESC, id DESC")
+    suspend fun writeOffsListOf(ingredientId: Long): List<WriteOff>
+
+    @Query("SELECT COUNT(*) FROM purchases")
+    suspend fun purchaseCountAll(): Int
+
+    @Query("SELECT COUNT(*) FROM write_offs")
+    suspend fun writeOffCountAll(): Int
+
     @Query("SELECT * FROM purchases WHERE id = :id")
     suspend fun purchase(id: Long): Purchase?
 

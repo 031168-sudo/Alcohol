@@ -249,11 +249,23 @@ private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -
     val scope = rememberCoroutineScope()
     // Каждый список грузится отдельно; если загрузка падает, причина видна на экране, а не прячется пустым списком.
     var loadError by remember { mutableStateOf<String?>(null) }
+    var diagnostics by remember { mutableStateOf<String?>(null) }
+    androidx.compose.runtime.LaunchedEffect(row.ingredientId) {
+        diagnostics = try {
+            val (p, w) = warehouse.countsForDiagnostics()
+            "$p и $w"
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            "ошибка $e"
+        }
+    }
     val purchases by androidx.compose.runtime.produceState(
         initialValue = emptyList<Purchase>(),
         key1 = row.ingredientId,
     ) {
         try {
+            value = warehouse.purchasesListOf(row.ingredientId)
             warehouse.purchasesOf(row.ingredientId).collect { value = it }
         } catch (e: kotlin.coroutines.cancellation.CancellationException) {
             throw e
@@ -266,6 +278,7 @@ private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -
         key1 = row.ingredientId,
     ) {
         try {
+            value = warehouse.writeOffsListOf(row.ingredientId)
             warehouse.writeOffsOf(row.ingredientId).collect { value = it }
         } catch (e: kotlin.coroutines.cancellation.CancellationException) {
             throw e
@@ -376,6 +389,11 @@ private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -
                     }
                 }
                 message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                Text(
+                    "Диагностика: позиция №${row.ingredientId}, закупок ${purchases.size}, списаний ${writeOffs.size}; " +
+                        "в базе всего закупок и списаний: ${diagnostics ?: "…"}",
+                    style = MaterialTheme.typography.labelSmall,
+                )
             }
         },
         confirmButton = { Button(onClick = onDismiss) { Text("Готово") } },

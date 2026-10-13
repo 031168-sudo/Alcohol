@@ -10,6 +10,9 @@ import kotlinx.coroutines.flow.Flow
 /** Внутренний сигнал: для правки списаний не хватает ингредиентов. Откатывает транзакцию. */
 private class BatchShortfall(val shortfalls: Map<Long, Double>) : RuntimeException()
 
+/** Внутренний сигнал: для правки ручного списания не хватает. Откатывает транзакцию. */
+private class WriteOffShortfall(val shortfall: Double) : RuntimeException()
+
 sealed interface BrewResult {
     data class Brewed(val batchId: Long, val total: Double) : BrewResult
 
@@ -265,38 +268,62 @@ class Warehouse(private val db: AppDatabase) {
      */
     suspend fun writeOff(ingredientId: Long, at: Long, amount: Double, reason: String): Double {
         require(amount > 0) { "Количество должно быть больше нуля" }
-        return db.withTransaction {
-            val open = stockDao.openPurchasesUntil(ingredientId, at)
-            val lots = open.map { Lot(it.id, it.remaining, it.totalPrice / it.quantity) }
-            val result = FifoAllocator.allocate(lots, amount)
-            if (result.shortfall > 0) return@withTransaction result.shortfall
-            val byId = open.associateBy { it.id }
-            for (allocation in result.allocations) {
-                stockDao.insertWriteOff(
-                    WriteOff(
-                        ingredientId = ingredientId,
-                        purchaseId = allocation.purchaseId,
-                        writtenOffAt = at,
-                        amount = allocation.amount,
-                        cost = allocation.cost,
-                        reason = reason.trim(),
-                    )
-                )
-                val purchase = byId.getValue(allocation.purchaseId)
-                stockDao.setRemaining(purchase.id, purchase.remaining - allocation.amount)
+        return db.withTransaction { allocateWriteOff(ingredientId, at, amount, reason) }
+    }
+
+    /**
+     * Меняет ручное списание: старые строки возвращаются на закупки, затем списание пересчитывается заново.
+     * Если не хватает, ничего не меняется, а нехватка возвращается.
+     */
+    suspend fun replaceWriteOff(ids: List<Long>, ingredientId: Long, at: Long, amount: Double, reason: String): Double {
+        require(amount > 0) { "Количество должно быть больше нуля" }
+        return try {
+            db.withTransaction {
+                for (id in ids) restoreWriteOff(id)
+                val shortfall = allocateWriteOff(ingredientId, at, amount, reason)
+                if (shortfall > 0) throw WriteOffShortfall(shortfall)
             }
             0.0
+        } catch (e: WriteOffShortfall) {
+            e.shortfall
         }
+    }
+
+    /** Внутри транзакции: раскладывает списание по закупкам. Возвращает нехватку, ничего не записывая при ней. */
+    private suspend fun allocateWriteOff(ingredientId: Long, at: Long, amount: Double, reason: String): Double {
+        val open = stockDao.openPurchasesUntil(ingredientId, at)
+        val lots = open.map { Lot(it.id, it.remaining, it.totalPrice / it.quantity) }
+        val result = FifoAllocator.allocate(lots, amount)
+        if (result.shortfall > 0) return result.shortfall
+        val byId = open.associateBy { it.id }
+        for (allocation in result.allocations) {
+            stockDao.insertWriteOff(
+                WriteOff(
+                    ingredientId = ingredientId,
+                    purchaseId = allocation.purchaseId,
+                    writtenOffAt = at,
+                    amount = allocation.amount,
+                    cost = allocation.cost,
+                    reason = reason.trim(),
+                )
+            )
+            val purchase = byId.getValue(allocation.purchaseId)
+            stockDao.setRemaining(purchase.id, purchase.remaining - allocation.amount)
+        }
+        return 0.0
+    }
+
+    /** Возвращает количество одной строки списания на закупку и удаляет её. */
+    private suspend fun restoreWriteOff(id: Long) {
+        val writeOff = stockDao.writeOff(id) ?: return
+        val purchase = stockDao.purchase(writeOff.purchaseId)
+        if (purchase != null) stockDao.setRemaining(purchase.id, purchase.remaining + writeOff.amount)
+        stockDao.deleteWriteOff(id)
     }
 
     /** Удаляет ручное списание и возвращает количество на закупку. */
     suspend fun deleteWriteOff(id: Long) {
-        db.withTransaction {
-            val writeOff = stockDao.writeOff(id) ?: return@withTransaction
-            val purchase = stockDao.purchase(writeOff.purchaseId)
-            if (purchase != null) stockDao.setRemaining(purchase.id, purchase.remaining + writeOff.amount)
-            stockDao.deleteWriteOff(id)
-        }
+        db.withTransaction { restoreWriteOff(id) }
     }
 
     /**

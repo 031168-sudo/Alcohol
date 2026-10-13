@@ -255,6 +255,50 @@ class Warehouse(private val db: AppDatabase) {
 
     suspend fun batchUsesOnce(batchId: Long): List<BatchIngredient> = batchDao.usesOnce(batchId)
 
+    fun writeOffsOf(ingredientId: Long): Flow<List<WriteOff>> = stockDao.writeOffsOf(ingredientId)
+
+    fun brewUsageOf(ingredientId: Long): Flow<List<BrewUsageRow>> = stockDao.brewUsageOf(ingredientId)
+
+    /**
+     * Ручное списание: берём закупки, сделанные не позже даты списания, как при варке.
+     * Возвращает нехватку (0, если всё списано).
+     */
+    suspend fun writeOff(ingredientId: Long, at: Long, amount: Double, reason: String): Double {
+        require(amount > 0) { "Количество должно быть больше нуля" }
+        return db.withTransaction {
+            val open = stockDao.openPurchasesUntil(ingredientId, at)
+            val lots = open.map { Lot(it.id, it.remaining, it.totalPrice / it.quantity) }
+            val result = FifoAllocator.allocate(lots, amount)
+            if (result.shortfall > 0) return@withTransaction result.shortfall
+            val byId = open.associateBy { it.id }
+            for (allocation in result.allocations) {
+                stockDao.insertWriteOff(
+                    WriteOff(
+                        ingredientId = ingredientId,
+                        purchaseId = allocation.purchaseId,
+                        writtenOffAt = at,
+                        amount = allocation.amount,
+                        cost = allocation.cost,
+                        reason = reason.trim(),
+                    )
+                )
+                val purchase = byId.getValue(allocation.purchaseId)
+                stockDao.setRemaining(purchase.id, purchase.remaining - allocation.amount)
+            }
+            0.0
+        }
+    }
+
+    /** Удаляет ручное списание и возвращает количество на закупку. */
+    suspend fun deleteWriteOff(id: Long) {
+        db.withTransaction {
+            val writeOff = stockDao.writeOff(id) ?: return@withTransaction
+            val purchase = stockDao.purchase(writeOff.purchaseId)
+            if (purchase != null) stockDao.setRemaining(purchase.id, purchase.remaining + writeOff.amount)
+            stockDao.deleteWriteOff(id)
+        }
+    }
+
     /**
      * Удаляет партию. Всё, что она взяла со склада, возвращается на те же закупки,
      * откуда списывалось, а этапы и списания удаляются вместе с ней.
@@ -374,7 +418,9 @@ class Warehouse(private val db: AppDatabase) {
         db.withTransaction {
             val current = stockDao.ingredient(id) ?: return@withTransaction
             if (cleanUnit != current.unit) {
-                require(stockDao.batchUsageOf(id) == 0 && stockDao.recipeUsageOf(id) == 0) {
+                require(
+                    stockDao.batchUsageOf(id) == 0 && stockDao.recipeUsageOf(id) == 0 && stockDao.writeOffUsageOf(id) == 0
+                ) {
                     "Единицу нельзя менять: позиция уже используется в рецептах или варках"
                 }
             }
@@ -390,6 +436,7 @@ class Warehouse(private val db: AppDatabase) {
                 }
                 stockDao.movePurchases(from = id, to = twin.id)
                 stockDao.moveBatchUsage(from = id, to = twin.id)
+                stockDao.moveWriteOffs(from = id, to = twin.id)
                 stockDao.moveRecipeItems(from = id, to = twin.id)
                 stockDao.deleteRecipeItemsOf(id)
                 stockDao.deleteIngredient(id)
@@ -417,7 +464,7 @@ class Warehouse(private val db: AppDatabase) {
                 "Из этой закупки уже списано ${"%.1f".format(used)} — количество не может быть меньше"
             }
             // Нельзя отнести закупку на дату позже варки, где она уже списана.
-            val firstUse = stockDao.earliestUsageOf(id)
+            val firstUse = listOfNotNull(stockDao.earliestUsageOf(id), stockDao.earliestWriteOffOf(id)).minOrNull()
             require(firstUse == null || purchasedAt <= firstUse) {
                 "Эта закупка уже списана в варку, которая была раньше новой даты"
             }
@@ -434,7 +481,7 @@ class Warehouse(private val db: AppDatabase) {
 
     /** Удаляет закупку. Возвращает false, если из неё уже что-то списано в варку. */
     suspend fun deletePurchase(id: Long): Boolean = db.withTransaction {
-        if (stockDao.usageCount(id) > 0) return@withTransaction false
+        if (stockDao.usageCount(id) > 0 || stockDao.writeOffCountOf(id) > 0) return@withTransaction false
         val purchase = stockDao.purchase(id) ?: return@withTransaction true
         stockDao.deletePurchase(id)
         // Позиция без закупок и без рецептов больше не нужна: убираем её со склада.

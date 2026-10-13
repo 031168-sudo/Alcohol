@@ -113,6 +113,38 @@ interface StockDao {
     @Update
     suspend fun updatePurchase(purchase: Purchase)
 
+    @Query("SELECT COUNT(*) FROM write_offs WHERE purchaseId = :purchaseId")
+    suspend fun writeOffCountOf(purchaseId: Long): Int
+
+    @Query("SELECT COUNT(*) FROM write_offs WHERE ingredientId = :ingredientId")
+    suspend fun writeOffUsageOf(ingredientId: Long): Int
+
+    @Query("SELECT MIN(writtenOffAt) FROM write_offs WHERE purchaseId = :purchaseId")
+    suspend fun earliestWriteOffOf(purchaseId: Long): Long?
+
+    @Query("UPDATE write_offs SET ingredientId = :to WHERE ingredientId = :from")
+    suspend fun moveWriteOffs(from: Long, to: Long)
+
+    @Insert
+    suspend fun insertWriteOff(writeOff: WriteOff): Long
+
+    @Query("SELECT * FROM write_offs WHERE ingredientId = :ingredientId ORDER BY writtenOffAt DESC, id DESC")
+    fun writeOffsOf(ingredientId: Long): Flow<List<WriteOff>>
+
+    @Query("SELECT * FROM write_offs WHERE id = :id")
+    suspend fun writeOff(id: Long): WriteOff?
+
+    @Query("DELETE FROM write_offs WHERE id = :id")
+    suspend fun deleteWriteOff(id: Long)
+
+    /** Списания варками по ингредиенту: по одной строке на варку. */
+    @Query(
+        "SELECT b.name AS batchName, b.startedAt AS startedAt, SUM(bi.amount) AS amount, SUM(bi.cost) AS cost " +
+            "FROM batch_ingredients bi JOIN batches b ON b.id = bi.batchId " +
+            "WHERE bi.ingredientId = :ingredientId GROUP BY bi.batchId ORDER BY b.startedAt DESC"
+    )
+    fun brewUsageOf(ingredientId: Long): Flow<List<BrewUsageRow>>
+
     @Query("DELETE FROM purchases WHERE id = :id")
     suspend fun deletePurchase(id: Long)
 

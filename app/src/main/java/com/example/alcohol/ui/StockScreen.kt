@@ -34,9 +34,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.alcohol.data.AppDatabase
+import com.example.alcohol.data.BrewUsageRow
 import com.example.alcohol.data.Category
 import com.example.alcohol.data.Purchase
 import com.example.alcohol.data.StockRow
@@ -218,9 +224,28 @@ private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -
     val scope = rememberCoroutineScope()
     val purchases by warehouse.purchasesOf(row.ingredientId).collectAsState(initial = emptyList())
 
+    val writeOffs by warehouse.writeOffsOf(row.ingredientId).collectAsState(initial = emptyList())
+    val brews by warehouse.brewUsageOf(row.ingredientId).collectAsState(initial = emptyList())
     var editing by remember { mutableStateOf<Purchase?>(null) }
     var editingIngredient by remember { mutableStateOf(false) }
+    var writingOff by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+
+    val manual = writeOffs
+        .groupBy { it.writtenOffAt to it.reason }
+        .map { (key, rows) ->
+            LedgerLine.Manual(
+                at = key.first,
+                reason = key.second,
+                amount = rows.sumOf { it.amount },
+                cost = rows.sumOf { it.cost },
+                ids = rows.map { it.id },
+            )
+        }
+    val ledger: List<LedgerLine> = (purchases.map { LedgerLine.Bought(it) } +
+        manual +
+        brews.map { LedgerLine.Brew(it) })
+        .sortedByDescending { it.at }
 
     FormDialog(
         onDismissRequest = onDismiss,
@@ -240,35 +265,72 @@ private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -
                         Icon(Icons.Default.Edit, contentDescription = "Изменить позицию")
                     }
                 }
-                if (purchases.isEmpty()) {
+                OutlinedButton(onClick = { writingOff = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Списать")
+                }
+                if (ledger.isEmpty()) {
                     Text("Закупок пока нет")
                 }
-                purchases.forEach { purchase ->
-                    Column {
-                        Text(
-                            "${formatDate(purchase.purchasedAt)} · %.1f %s · %.0f ₽".format(
-                                purchase.quantity, row.unit, purchase.totalPrice,
-                            ),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        Text(
-                            "Осталось %.1f %s".format(purchase.remaining, row.unit),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            IconButton(onClick = { editing = purchase }) {
-                                Icon(Icons.Default.Edit, contentDescription = "Изменить закупку")
-                            }
-                            IconButton(onClick = {
-                                scope.launch {
-                                    message = if (warehouse.deletePurchase(purchase.id)) {
-                                        null
-                                    } else {
-                                        "Из этой закупки уже списано в варку, удалить нельзя"
+                // Закупки, ручные списания и варки — одним списком по дате, новые сверху.
+                ledger.forEach { line ->
+                    when (line) {
+                        is LedgerLine.Bought -> {
+                            val purchase = line.purchase
+                            Column {
+                                Text(
+                                    "${formatDate(purchase.purchasedAt)} · %.1f %s · %.0f ₽".format(
+                                        purchase.quantity, row.unit, purchase.totalPrice,
+                                    ),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Text(
+                                    "Осталось %.1f %s".format(purchase.remaining, row.unit),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                    IconButton(onClick = { editing = purchase }) {
+                                        Icon(Icons.Default.Edit, contentDescription = "Изменить закупку")
+                                    }
+                                    IconButton(onClick = {
+                                        scope.launch {
+                                            message = if (warehouse.deletePurchase(purchase.id)) {
+                                                null
+                                            } else {
+                                                "Из этой закупки уже списано, удалить нельзя"
+                                            }
+                                        }
+                                    }) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Удалить закупку")
                                     }
                                 }
-                            }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Удалить закупку")
+                            }
+                        }
+                        is LedgerLine.Manual -> {
+                            Column {
+                                Text(
+                                    writeOffLine(formatDate(line.at), line.amount, row.unit, line.cost),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Text(
+                                    if (line.reason.isBlank()) "Списание" else "Списание: ${line.reason}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                    IconButton(onClick = {
+                                        scope.launch { line.ids.forEach { warehouse.deleteWriteOff(it) } }
+                                    }) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Удалить списание")
+                                    }
+                                }
+                            }
+                        }
+                        is LedgerLine.Brew -> {
+                            Column {
+                                Text(
+                                    writeOffLine(formatDate(line.row.startedAt), line.row.amount, row.unit, line.row.cost),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Text("Варка: ${line.row.batchName}", style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
@@ -278,6 +340,10 @@ private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -
         },
         confirmButton = { Button(onClick = onDismiss) { Text("Готово") } },
     )
+
+    if (writingOff) {
+        WriteOffDialog(warehouse = warehouse, row = row, onDismiss = { writingOff = false })
+    }
 
     editing?.let { purchase ->
         PurchaseDialog(
@@ -544,5 +610,101 @@ private fun CategoriesDialog(warehouse: Warehouse, onDismiss: () -> Unit) {
             }
         },
         confirmButton = { Button(onClick = onDismiss) { Text("Готово") } },
+    )
+}
+
+/** Строка в карточке позиции: закупка, ручное списание или списание варкой. */
+private sealed interface LedgerLine {
+    val at: Long
+
+    data class Bought(val purchase: Purchase) : LedgerLine {
+        override val at: Long get() = purchase.purchasedAt
+    }
+
+    data class Manual(
+        override val at: Long,
+        val reason: String,
+        val amount: Double,
+        val cost: Double,
+        val ids: List<Long>,
+    ) : LedgerLine
+
+    data class Brew(val row: BrewUsageRow) : LedgerLine {
+        override val at: Long get() = row.startedAt
+    }
+}
+
+/** «дата · −количество единица · −сумма ₽», где сумма красная. */
+private fun writeOffLine(date: String, amount: Double, unit: String, cost: Double): AnnotatedString =
+    buildAnnotatedString {
+        append("$date · −${amount.plain()} $unit · ")
+        withStyle(SpanStyle(color = Color(0xFFB3261E))) {
+            append("−%.0f ₽".format(cost))
+        }
+    }
+
+/** Ручное списание: количество из позиции, дата не раньше закупок, которые покрывают его. */
+@Composable
+private fun WriteOffDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var dateText by remember { mutableStateOf(formatDate(System.currentTimeMillis())) }
+    var amountText by remember { mutableStateOf("") }
+    var reason by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    FormDialog(
+        onDismissRequest = onDismiss,
+        message = error,
+        title = { Text("Списать: ${row.name}") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                DateField(
+                    label = "Дата (дд.мм.гггг)",
+                    value = dateText,
+                    onValueChange = { dateText = it },
+                )
+                OutlinedTextField(
+                    value = amountText,
+                    onValueChange = { amountText = it },
+                    label = { Text("Сколько, ${row.unit}") },
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = reason,
+                    onValueChange = { reason = it },
+                    label = { Text("Причина (необязательно)") },
+                    singleLine = true,
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val at = parseDate(dateText)
+                val amount = amountText.replace(',', '.').toDoubleOrNull()
+                when {
+                    at == null -> error = "Дата в формате дд.мм.гггг"
+                    amount == null || amount <= 0 -> error = "Укажи количество"
+                    else -> {
+                        error = null
+                        scope.launch {
+                            try {
+                                val shortfall = warehouse.writeOff(row.ingredientId, at, amount, reason)
+                                if (shortfall > 0) {
+                                    error = "Не хватает ${"%.1f".format(shortfall)} ${row.unit}"
+                                } else {
+                                    onDismiss()
+                                }
+                            } catch (e: IllegalArgumentException) {
+                                error = e.message ?: "Не удалось списать"
+                            }
+                        }
+                    }
+                }
+            }) { Text("Списать") }
+        },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Отмена") } },
     )
 }

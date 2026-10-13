@@ -96,3 +96,19 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
         )
     }
 }
+
+/** Ручные списания со склада. */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `write_offs` (" +
+                "`id` INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, " +
+                "`ingredientId` INTEGER NOT NULL, " +
+                "`purchaseId` INTEGER NOT NULL, " +
+                "`writtenOffAt` INTEGER NOT NULL, " +
+                "`amount` REAL NOT NULL, " +
+                "`cost` REAL NOT NULL, " +
+                "`reason` TEXT NOT NULL)"
+        )
+    }
+}

@@ -238,9 +238,9 @@ private sealed interface LedgerEntry {
 private fun writeOffLine(date: String, amount: Double, unit: String, cost: Double): androidx.compose.ui.text.AnnotatedString =
     androidx.compose.ui.text.buildAnnotatedString {
         append("$date · −${amount.plain()} $unit · ")
-        androidx.compose.ui.text.withStyle(androidx.compose.ui.text.SpanStyle(color = androidx.compose.ui.graphics.Color(0xFFB3261E))) {
-            append("−${"%.0f".format(cost)} ₽")
-        }
+        pushStyle(androidx.compose.ui.text.SpanStyle(color = androidx.compose.ui.graphics.Color(0xFFB3261E)))
+        append("−${"%.0f".format(cost)} ₽")
+        pop()
     }
 
 /** Закупки одной позиции склада: можно изменить или удалить каждую. */

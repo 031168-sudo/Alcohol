@@ -78,7 +78,7 @@ fun BrewDialog(
                 )
                 Text("Что списываем со склада:", style = MaterialTheme.typography.titleSmall)
                 amounts.keys.toList().forEach { id ->
-                    val label = names[id] ?: "Ингредиент #$id"
+                    val label = names[id] ?: "Позиция не найдена на складе"
                     OutlinedTextField(
                         value = amounts[id] ?: "",
                         onValueChange = { amounts[id] = it },
@@ -129,7 +129,7 @@ fun BrewDialog(
                         }
                     }
                 }
-            }) { Text("Сварить") }
+            }) { Text(if (drinkType == DrinkType.CIDER) "Сделать" else "Сварить") }
         },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Отмена") } },
     )

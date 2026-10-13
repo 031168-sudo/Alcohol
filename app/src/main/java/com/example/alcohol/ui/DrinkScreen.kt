@@ -90,7 +90,9 @@ fun DrinkScreen(drinkType: DrinkType) {
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Button(onClick = { brewing = recipe }) { Text("Сварить") }
+                        Button(onClick = { brewing = recipe }) {
+                            Text(if (drinkType == DrinkType.CIDER) "Сделать" else "Сварить")
+                        }
                         Spacer(modifier = Modifier.weight(1f))
                         IconButton(onClick = {
                             editingRecipe = recipe

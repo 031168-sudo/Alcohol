@@ -22,10 +22,10 @@ interface StockDao {
     @Query(
         """
         SELECT i.id AS ingredientId, i.name AS name, i.categoryId AS categoryId,
-               c.name AS category, i.unit AS unit,
+               COALESCE(c.name, 'Без категории') AS category, i.unit AS unit,
                COALESCE(SUM(p.remaining), 0) AS remaining
         FROM ingredients i
-        JOIN categories c ON c.id = i.categoryId
+        LEFT JOIN categories c ON c.id = i.categoryId
         LEFT JOIN purchases p ON p.ingredientId = i.id
         GROUP BY i.id
         ORDER BY c.id, i.name

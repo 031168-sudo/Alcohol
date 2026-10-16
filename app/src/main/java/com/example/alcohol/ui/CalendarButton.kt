@@ -76,25 +76,39 @@ object DeviceCalendars {
         return result
     }
 
-    /** Добавляет событие на весь день. Возвращает id события или null, если не получилось. */
-    fun addAllDayEvent(context: Context, calendarId: Long, title: String, dayMillis: Long): Long? {
-        // Событие на весь день хранится в UTC: берём календарную дату по часовому поясу телефона.
-        val date = Instant.ofEpochMilli(dayMillis).atZone(ZoneId.systemDefault()).toLocalDate()
-        val start = date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+    /**
+     * Добавляет событие на указанный день: начало в 12:00 по времени телефона, длится 30 минут,
+     * с напоминанием в момент начала. Возвращает id события или null, если не получилось.
+     */
+    fun addEvent(context: Context, calendarId: Long, title: String, dayMillis: Long): Long? {
+        val zone = ZoneId.systemDefault()
+        val date = Instant.ofEpochMilli(dayMillis).atZone(zone).toLocalDate()
+        val start = date.atTime(12, 0).atZone(zone).toInstant().toEpochMilli()
         val values = ContentValues().apply {
             put(CalendarContract.Events.CALENDAR_ID, calendarId)
             put(CalendarContract.Events.TITLE, title)
             put(CalendarContract.Events.DTSTART, start)
-            put(CalendarContract.Events.DTEND, start + 24L * 60 * 60 * 1000)
-            put(CalendarContract.Events.ALL_DAY, 1)
-            put(CalendarContract.Events.EVENT_TIMEZONE, "UTC")
+            put(CalendarContract.Events.DTEND, start + EVENT_MINUTES * 60_000L)
+            put(CalendarContract.Events.EVENT_TIMEZONE, zone.id)
+            put(CalendarContract.Events.HAS_ALARM, 1)
         }
         return try {
-            context.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)?.let { ContentUris.parseId(it) }
+            val eventId = context.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
+                ?.let { ContentUris.parseId(it) } ?: return null
+            // Напоминание в момент начала события.
+            val reminder = ContentValues().apply {
+                put(CalendarContract.Reminders.EVENT_ID, eventId)
+                put(CalendarContract.Reminders.MINUTES, 0)
+                put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_ALERT)
+            }
+            context.contentResolver.insert(CalendarContract.Reminders.CONTENT_URI, reminder)
+            eventId
         } catch (_: SecurityException) {
             null
         }
     }
+
+    private const val EVENT_MINUTES = 30
 }
 
 /** «🍺 Пиво, партия 13.10.2026: РОЗЛИВ». */
@@ -153,13 +167,13 @@ fun StageCalendarButton(warehouse: Warehouse, drinkType: DrinkType, summary: Bat
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(eventTitle(drinkType, summary), style = MaterialTheme.typography.bodyMedium)
-                    Text("Событие на весь день: ${formatDate(planned)}", style = MaterialTheme.typography.bodySmall)
+                    Text("${formatDate(planned)}, 12:00, 30 минут, напоминание в момент начала", style = MaterialTheme.typography.bodySmall)
                     if (calendars.isEmpty()) Text("На телефоне нет календарей, в которые можно писать.")
                     calendars.forEach { calendar ->
                         OutlinedButton(
                             onClick = {
                                 picking = false
-                                val id = DeviceCalendars.addAllDayEvent(context, calendar.id, eventTitle(drinkType, summary), planned)
+                                val id = DeviceCalendars.addEvent(context, calendar.id, eventTitle(drinkType, summary), planned)
                                 if (id != null) {
                                     scope.launch { warehouse.setStageCalendarEvent(stageId, id) }
                                 } else {

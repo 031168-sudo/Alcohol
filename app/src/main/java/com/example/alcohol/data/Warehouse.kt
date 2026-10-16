@@ -168,6 +168,9 @@ class Warehouse(private val db: AppDatabase) {
 
     fun stages(batchId: Long): Flow<List<BatchStage>> = batchDao.stages(batchId)
 
+    /** Запоминает, что этап занесён в календарь телефона (id события). */
+    suspend fun setStageCalendarEvent(stageId: Long, eventId: Long?) = batchDao.setStageCalendarEvent(stageId, eventId)
+
     /**
      * Записывает закупку. Позиция склада — это пара «название + категория»: если такой позиции ещё нет, она создаётся.
      * Цена за единицу = totalPrice / quantity.

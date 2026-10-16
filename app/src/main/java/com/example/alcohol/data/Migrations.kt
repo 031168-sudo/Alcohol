@@ -126,3 +126,10 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
         )
     }
 }
+
+/** Этап можно занести в календарь телефона: запоминаем id созданного события. */
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `batch_stages` ADD COLUMN `calendarEventId` INTEGER")
+    }
+}

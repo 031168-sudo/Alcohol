@@ -16,6 +16,9 @@ data class BatchSummary(
     /** Следующий невыполненный этап и его прогнозная дата. Null, если все этапы пройдены. */
     val nextType: StageType?,
     val nextPlannedAt: Long?,
+    /** Id следующего этапа и id его события в календаре телефона (null, если не занесён). */
+    val nextStageId: Long?,
+    val nextEventId: Long?,
 )
 
 /** Этап, который скоро наступает или уже просрочен, для напоминаний. */
@@ -42,7 +45,11 @@ interface BatchDao {
             (SELECT s.type FROM batch_stages s
                 WHERE s.batchId = b.id AND s.doneAt IS NULL ORDER BY s.id LIMIT 1) AS nextType,
             (SELECT s.plannedAt FROM batch_stages s
-                WHERE s.batchId = b.id AND s.doneAt IS NULL ORDER BY s.id LIMIT 1) AS nextPlannedAt
+                WHERE s.batchId = b.id AND s.doneAt IS NULL ORDER BY s.id LIMIT 1) AS nextPlannedAt,
+            (SELECT s.id FROM batch_stages s
+                WHERE s.batchId = b.id AND s.doneAt IS NULL ORDER BY s.id LIMIT 1) AS nextStageId,
+            (SELECT s.calendarEventId FROM batch_stages s
+                WHERE s.batchId = b.id AND s.doneAt IS NULL ORDER BY s.id LIMIT 1) AS nextEventId
         FROM batches b
         LEFT JOIN batch_ingredients bi ON bi.batchId = b.id
         WHERE b.drinkType = :type
@@ -114,4 +121,7 @@ interface BatchDao {
 
     @Update
     suspend fun updateStage(stage: BatchStage)
+
+    @Query("UPDATE batch_stages SET calendarEventId = :eventId WHERE id = :stageId")
+    suspend fun setStageCalendarEvent(stageId: Long, eventId: Long?)
 }

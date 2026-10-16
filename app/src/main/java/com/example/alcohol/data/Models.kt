@@ -142,4 +142,6 @@ data class BatchStage(
     val temperatureC: Double? = null,
     val gravity: Double? = null,
     val notes: String = "",
+    /** Id события в календаре телефона, если этап уже занесён туда. Null, если нет. */
+    val calendarEventId: Long? = null,
 )

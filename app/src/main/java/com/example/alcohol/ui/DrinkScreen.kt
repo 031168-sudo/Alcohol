@@ -147,15 +147,19 @@ fun DrinkScreen(drinkType: DrinkType) {
                         val overdue = planned != null &&
                             Instant.ofEpochMilli(planned).atZone(ZoneId.systemDefault()).toLocalDate()
                                 .isBefore(LocalDate.now())
-                        Text(
-                            "Дальше: ${stageTitle(next)} · ${planned?.let { formatDate(it) } ?: "не запланировано"}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (overdue) {
-                                MaterialTheme.colorScheme.error
-                            } else {
-                                MaterialTheme.colorScheme.primary
-                            },
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "Дальше: ${stageTitle(next)} · ${planned?.let { formatDate(it) } ?: "не запланировано"}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (overdue) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                },
+                                modifier = Modifier.weight(1f),
+                            )
+                            StageCalendarButton(warehouse = warehouse, drinkType = drinkType, summary = summary)
+                        }
                     }
                 }
             }

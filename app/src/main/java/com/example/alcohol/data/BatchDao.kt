@@ -81,6 +81,16 @@ interface BatchDao {
     @Insert
     suspend fun insertBatch(batch: Batch): Long
 
+    @Update
+    suspend fun updateBatch(batch: Batch)
+
+    /** Самая поздняя дата закупки среди тех, из которых партия уже что-то взяла. Null, если ничего не взято. */
+    @Query(
+        "SELECT MAX(p.purchasedAt) FROM batch_ingredients bi " +
+            "JOIN purchases p ON p.id = bi.purchaseId WHERE bi.batchId = :batchId"
+    )
+    suspend fun latestUsedPurchaseDate(batchId: Long): Long?
+
     @Insert
     suspend fun insertUses(uses: List<BatchIngredient>)
 

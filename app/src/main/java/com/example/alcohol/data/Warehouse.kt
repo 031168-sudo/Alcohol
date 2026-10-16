@@ -137,6 +137,35 @@ class Warehouse(private val db: AppDatabase) {
 
     fun batch(batchId: Long): Flow<Batch?> = batchDao.batch(batchId)
 
+    /**
+     * Меняет дату постановки, объём и название партии.
+     * Раньше самой поздней закупки, из которой партия уже брала, дату ставить нельзя.
+     * Ещё не выполненные этапы сдвигаются вместе с датой. Возвращает null, если всё прошло, или текст ошибки.
+     */
+    suspend fun updateBatchBasics(batchId: Long, name: String, startedAt: Long, volumeL: Double): String? {
+        if (volumeL <= 0) return "Объём должен быть больше нуля"
+        return db.withTransaction {
+            val batch = batchDao.batchOnce(batchId) ?: return@withTransaction "Партия не найдена"
+            if (startedAt != batch.startedAt) {
+                val latest = batchDao.latestUsedPurchaseDate(batchId)
+                if (latest != null && startedAt < latest) {
+                    return@withTransaction "Часть ингредиентов куплена позже этой даты, раньше поставить нельзя"
+                }
+            }
+            val delta = startedAt - batch.startedAt
+            batchDao.updateBatch(batch.copy(name = name.trim().ifEmpty { batch.name }, startedAt = startedAt, volumeL = volumeL))
+            if (delta != 0L) {
+                for (stage in batchDao.stagesOnce(batchId)) {
+                    val planned = stage.plannedAt
+                    if (stage.doneAt == null && planned != null) {
+                        batchDao.updateStage(stage.copy(plannedAt = planned + delta))
+                    }
+                }
+            }
+            null
+        }
+    }
+
     fun stages(batchId: Long): Flow<List<BatchStage>> = batchDao.stages(batchId)
 
     /**

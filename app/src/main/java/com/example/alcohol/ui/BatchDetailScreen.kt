@@ -49,7 +49,6 @@ fun BatchDetailScreen(batchId: Long, onBack: () -> Unit) {
     val stages by warehouse.stages(batchId).collectAsState(initial = emptyList())
     var completing by remember { mutableStateOf<BatchStage?>(null) }
     var usageOpen by remember { mutableStateOf(false) }
-    var editingBasics by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -67,14 +66,14 @@ fun BatchDetailScreen(batchId: Long, onBack: () -> Unit) {
         batch?.let { b ->
             item {
                 // Нажми на название, чтобы увидеть и поправить всё, что взято на варку.
-                // Карандаш справа открывает правку даты и объёма партии.
+                // Карандаш справа открывает то же окно правки партии: дата, объём и списания.
                 Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     Text(
                         b.name,
                         style = MaterialTheme.typography.titleLarge,
                         modifier = Modifier.weight(1f).clickable { usageOpen = true },
                     )
-                    IconButton(onClick = { editingBasics = true }) {
+                    IconButton(onClick = { usageOpen = true }) {
                         Icon(Icons.Default.Edit, contentDescription = "Изменить партию")
                     }
                 }
@@ -131,12 +130,6 @@ fun BatchDetailScreen(batchId: Long, onBack: () -> Unit) {
         }
     }
 
-    if (editingBasics) {
-        batch?.let { b ->
-            BatchBasicsDialog(warehouse = warehouse, batch = b, onDismiss = { editingBasics = false })
-        }
-    }
-
     if (confirmDelete) {
         FormDialog(
             onDismissRequest = { confirmDelete = false },
@@ -160,11 +153,9 @@ fun BatchDetailScreen(batchId: Long, onBack: () -> Unit) {
         )
     }
     if (usageOpen) {
-        BatchUsageDialog(
-            warehouse = warehouse,
-            batchId = batchId,
-            onDismiss = { usageOpen = false },
-        )
+        batch?.let { b ->
+            BatchUsageDialog(warehouse = warehouse, batch = b, onDismiss = { usageOpen = false })
+        }
     }
 
     completing?.let { stage ->
@@ -250,7 +241,12 @@ private fun CompleteStageDialog(
  * Количество можно поправить, очистить (списание снимется) или добавить новый ингредиент.
  */
 @Composable
-private fun BatchUsageDialog(warehouse: Warehouse, batchId: Long, onDismiss: () -> Unit) {
+private fun BatchUsageDialog(warehouse: Warehouse, batch: com.example.alcohol.data.Batch, onDismiss: () -> Unit) {
+    val batchId = batch.id
+    var dateText by remember { mutableStateOf(formatDate(batch.startedAt)) }
+    var volumeText by remember {
+        mutableStateOf(batch.volumeL.let { if (it == it.toLong().toDouble()) it.toLong().toString() else it.toString() })
+    }
     val stock by warehouse.stock().collectAsState(initial = emptyList())
     val uses by warehouse.batchUses(batchId).collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
@@ -273,12 +269,20 @@ private fun BatchUsageDialog(warehouse: Warehouse, batchId: Long, onDismiss: () 
     FormDialog(
         onDismissRequest = onDismiss,
         message = error,
-        title = { Text("На варку взято") },
+        title = { Text("Изменить партию") },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                DateField(label = "Дата (дд.мм.гггг)", value = dateText, onValueChange = { dateText = it })
+                OutlinedTextField(
+                    value = volumeText,
+                    onValueChange = { volumeText = it },
+                    label = { Text("Объём, л") },
+                    singleLine = true,
+                )
+                Text("На варку взято", style = MaterialTheme.typography.titleSmall)
                 Text(
                     "Всего на ${"%.2f".format(totalCost)} ₽. Очисти поле, чтобы снять списание. " +
                         "Закупки берутся только те, что сделаны не позже даты варки.",
@@ -306,8 +310,31 @@ private fun BatchUsageDialog(warehouse: Warehouse, batchId: Long, onDismiss: () 
                         text.replace(',', '.').toDoubleOrNull()?.takeIf { it > 0 }?.let { id to it }
                     }
                     .toMap()
+                val at = parseDate(dateText)
+                val volume = volumeText.replace(',', '.').toDoubleOrNull()
+                if (at == null) {
+                    error = "Дата в формате дд.мм.гггг"
+                    return@Button
+                }
+                if (volume == null || volume <= 0) {
+                    error = "Укажи объём в литрах"
+                    return@Button
+                }
                 error = null
                 scope.launch {
+                    // Сначала дата и объём (списания берут закупки не позже этой даты), потом списания.
+                    // Дата в названии партии («Рецепт · дд.мм.гггг») меняется вместе с датой постановки.
+                    val oldSuffix = " · ${formatDate(batch.startedAt)}"
+                    val name = if (batch.name.endsWith(oldSuffix)) {
+                        batch.name.removeSuffix(oldSuffix) + " · ${formatDate(at)}"
+                    } else {
+                        batch.name
+                    }
+                    val problem = warehouse.updateBatchBasics(batchId, name, at, volume)
+                    if (problem != null) {
+                        error = problem
+                        return@launch
+                    }
                     val shortfalls = warehouse.setBatchUsage(batchId, targets)
                     if (shortfalls.isEmpty()) {
                         onDismiss()
@@ -326,61 +353,3 @@ private fun BatchUsageDialog(warehouse: Warehouse, batchId: Long, onDismiss: () 
 
 private fun Double.toPlainString(): String =
     if (this % 1.0 == 0.0) this.toLong().toString() else this.toString()
-
-/** Правка партии: дата постановки и объём в литрах. */
-@Composable
-private fun BatchBasicsDialog(warehouse: Warehouse, batch: com.example.alcohol.data.Batch, onDismiss: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    var dateText by remember { mutableStateOf(formatDate(batch.startedAt)) }
-    var volumeText by remember { mutableStateOf(batch.volumeL.let { if (it == it.toLong().toDouble()) it.toLong().toString() else it.toString() }) }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    FormDialog(
-        onDismissRequest = onDismiss,
-        message = error,
-        title = { Text("Изменить партию") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                DateField(label = "Дата (дд.мм.гггг)", value = dateText, onValueChange = { dateText = it })
-                OutlinedTextField(
-                    value = volumeText,
-                    onValueChange = { volumeText = it },
-                    label = { Text("Объём, л") },
-                    singleLine = true,
-                )
-                Text(
-                    "Стоимость литра пересчитается. Ещё не выполненные этапы сдвинутся вместе с датой.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-        },
-        confirmButton = {
-            Button(onClick = {
-                val at = parseDate(dateText)
-                val volume = volumeText.replace(',', '.').toDoubleOrNull()
-                when {
-                    at == null -> error = "Дата в формате дд.мм.гггг"
-                    volume == null || volume <= 0 -> error = "Укажи объём в литрах"
-                    else -> {
-                        error = null
-                        // Дата в названии партии («Рецепт · дд.мм.гггг») меняется вместе с датой постановки.
-                        val oldSuffix = " · ${formatDate(batch.startedAt)}"
-                        val name = if (batch.name.endsWith(oldSuffix)) {
-                            batch.name.removeSuffix(oldSuffix) + " · ${formatDate(at)}"
-                        } else {
-                            batch.name
-                        }
-                        scope.launch {
-                            val problem = warehouse.updateBatchBasics(batch.id, name, at, volume)
-                            if (problem == null) onDismiss() else error = problem
-                        }
-                    }
-                }
-            }) { Text("Сохранить") }
-        },
-        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Отмена") } },
-    )
-}

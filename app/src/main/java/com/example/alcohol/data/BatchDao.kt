@@ -19,6 +19,8 @@ data class BatchSummary(
     /** Id следующего этапа и id его события в календаре телефона (null, если не занесён). */
     val nextStageId: Long?,
     val nextEventId: Long?,
+    /** Название следующего этапа (пустое у совсем старых записей). */
+    val nextTitle: String?,
 )
 
 /** Этап, который скоро наступает или уже просрочен, для напоминаний. */
@@ -27,6 +29,7 @@ data class DueStage(
     val batchName: String,
     val type: StageType,
     val plannedAt: Long,
+    val title: String,
 )
 
 @Dao
@@ -38,10 +41,13 @@ interface BatchDao {
             COALESCE(SUM(bi.cost), 0) +
                 b.volumeL * COALESCE((SELECT SUM(r.price / r.volumeL) FROM resources r
                     WHERE r.drinkType = b.drinkType AND r.volumeL > 0), 0) AS total,
-            EXISTS (
+            (EXISTS (
                 SELECT 1 FROM batch_stages s
                 WHERE s.batchId = b.id AND s.type IN ('BOTTLING', 'KEGGING') AND s.doneAt IS NOT NULL
-            ) AS bottled,
+            ) OR (
+                EXISTS (SELECT 1 FROM batch_stages s WHERE s.batchId = b.id)
+                AND NOT EXISTS (SELECT 1 FROM batch_stages s WHERE s.batchId = b.id AND s.doneAt IS NULL)
+            )) AS bottled,
             (SELECT s.type FROM batch_stages s
                 WHERE s.batchId = b.id AND s.doneAt IS NULL ORDER BY s.id LIMIT 1) AS nextType,
             (SELECT s.plannedAt FROM batch_stages s
@@ -49,7 +55,9 @@ interface BatchDao {
             (SELECT s.id FROM batch_stages s
                 WHERE s.batchId = b.id AND s.doneAt IS NULL ORDER BY s.id LIMIT 1) AS nextStageId,
             (SELECT s.calendarEventId FROM batch_stages s
-                WHERE s.batchId = b.id AND s.doneAt IS NULL ORDER BY s.id LIMIT 1) AS nextEventId
+                WHERE s.batchId = b.id AND s.doneAt IS NULL ORDER BY s.id LIMIT 1) AS nextEventId,
+            (SELECT s.title FROM batch_stages s
+                WHERE s.batchId = b.id AND s.doneAt IS NULL ORDER BY s.id LIMIT 1) AS nextTitle
         FROM batches b
         LEFT JOIN batch_ingredients bi ON bi.batchId = b.id
         WHERE b.drinkType = :type
@@ -76,7 +84,7 @@ interface BatchDao {
 
     @Query(
         """
-        SELECT s.id AS stageId, b.name AS batchName, s.type AS type, s.plannedAt AS plannedAt
+        SELECT s.id AS stageId, b.name AS batchName, s.type AS type, s.plannedAt AS plannedAt, s.title AS title
         FROM batch_stages s
         JOIN batches b ON b.id = s.batchId
         WHERE s.doneAt IS NULL AND s.plannedAt IS NOT NULL AND s.plannedAt <= :until

@@ -4,7 +4,7 @@ import androidx.room.withTransaction
 import com.example.alcohol.domain.AllocationResult
 import com.example.alcohol.domain.FifoAllocator
 import com.example.alcohol.domain.Lot
-import com.example.alcohol.domain.StageTemplates
+import com.example.alcohol.domain.StagePlanner
 import kotlinx.coroutines.flow.Flow
 
 /** Внутренний сигнал: для правки списаний не хватает ингредиентов. Откатывает транзакцию. */
@@ -30,6 +30,7 @@ class Warehouse(private val db: AppDatabase) {
     private val batchDao = db.batchDao()
     private val yearTotalDao = db.yearTotalDao()
     private val resourceDao = db.resourceDao()
+    private val stageTemplateDao = db.stageTemplateDao()
     private val recipeDao = db.recipeDao()
 
     fun stock(): Flow<List<StockRow>> = stockDao.stock()
@@ -168,6 +169,46 @@ class Warehouse(private val db: AppDatabase) {
 
     fun stages(batchId: Long): Flow<List<BatchStage>> = batchDao.stages(batchId)
 
+    /** Общий процесс для напитка: шаги, из которых создаются этапы новых партий. */
+    fun stageTemplates(type: DrinkType): Flow<List<StageTemplate>> = stageTemplateDao.all(type)
+
+    suspend fun addStageTemplate(type: DrinkType, title: String, daysAfterPrevious: Int) {
+        val clean = title.trim()
+        require(clean.isNotEmpty()) { "Укажи название этапа" }
+        require(daysAfterPrevious >= 0) { "Срок не может быть отрицательным" }
+        db.withTransaction {
+            val next = (stageTemplateDao.allOnce(type).maxOfOrNull { it.orderIndex } ?: -1) + 1
+            stageTemplateDao.insert(
+                StageTemplate(drinkType = type, orderIndex = next, title = clean, daysAfterPrevious = daysAfterPrevious)
+            )
+        }
+    }
+
+    suspend fun updateStageTemplate(id: Long, title: String, daysAfterPrevious: Int) {
+        val clean = title.trim()
+        require(clean.isNotEmpty()) { "Укажи название этапа" }
+        require(daysAfterPrevious >= 0) { "Срок не может быть отрицательным" }
+        val current = stageTemplateDao.get(id) ?: return
+        stageTemplateDao.update(current.copy(title = clean, daysAfterPrevious = daysAfterPrevious))
+    }
+
+    suspend fun deleteStageTemplate(id: Long) = stageTemplateDao.delete(id)
+
+    /** Двигает шаг на одно место вверх или вниз. */
+    suspend fun moveStageTemplate(id: Long, up: Boolean) {
+        db.withTransaction {
+            val current = stageTemplateDao.get(id) ?: return@withTransaction
+            val list = stageTemplateDao.allOnce(current.drinkType).toMutableList()
+            val index = list.indexOfFirst { it.id == id }
+            val target = if (up) index - 1 else index + 1
+            if (index < 0 || target !in list.indices) return@withTransaction
+            list[index] = list[target].also { list[target] = list[index] }
+            list.forEachIndexed { i, template ->
+                if (template.orderIndex != i) stageTemplateDao.update(template.copy(orderIndex = i))
+            }
+        }
+    }
+
     /** Запоминает, что этап занесён в календарь телефона (id события). */
     suspend fun setStageCalendarEvent(stageId: Long, eventId: Long?) = batchDao.setStageCalendarEvent(stageId, eventId)
 
@@ -296,9 +337,19 @@ class Warehouse(private val db: AppDatabase) {
             }
             batchDao.insertUses(uses)
 
-            val planned = StageTemplates.plan(drinkType, startedAt)
+            // Этапы партии берутся из общего процесса для этого напитка: у каждого свои название и срок.
+            val steps = stageTemplateDao.allOnce(drinkType)
+            val planned = StagePlanner.plan(steps.map { it.daysAfterPrevious }, startedAt)
             batchDao.insertStages(
-                planned.map { (type, at) -> BatchStage(batchId = batchId, type = type, plannedAt = at) }
+                steps.mapIndexed { i, step ->
+                    BatchStage(
+                        batchId = batchId,
+                        type = step.type,
+                        plannedAt = planned[i],
+                        title = step.title,
+                        daysAfterPrevious = step.daysAfterPrevious,
+                    )
+                }
             )
 
             BrewResult.Brewed(batchId = batchId, total = uses.sumOf { it.cost })
@@ -480,11 +531,11 @@ class Warehouse(private val db: AppDatabase) {
                 )
             )
 
-            val replanned = StageTemplates.replan(batch.drinkType, stage.type, doneAt)
-            for (next in batchDao.stagesOnce(batch.id)) {
-                if (next.doneAt != null) continue
-                val newPlan = replanned[next.type] ?: continue
-                batchDao.updateStage(next.copy(plannedAt = newPlan))
+            // Следующие этапы (по порядку) отсчитываются от фактической даты этого этапа.
+            val following = batchDao.stagesOnce(batch.id).filter { it.id > stage.id }
+            val newPlan = StagePlanner.replanAfter(following.map { it.daysAfterPrevious }, doneAt)
+            following.forEachIndexed { i, next ->
+                if (next.doneAt == null) batchDao.updateStage(next.copy(plannedAt = newPlan[i]))
             }
         }
     }

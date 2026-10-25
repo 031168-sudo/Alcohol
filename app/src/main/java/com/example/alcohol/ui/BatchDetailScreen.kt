@@ -101,7 +101,7 @@ fun BatchDetailScreen(batchId: Long, onBack: () -> Unit) {
             ) {
                 Row(modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp, end = 4.dp)) {
                     Column(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
-                        Text(stageTitle(stage.type), style = MaterialTheme.typography.titleSmall)
+                        Text(stage.displayTitle(), style = MaterialTheme.typography.titleSmall)
                         if (done != null) {
                             Text(
                             "✓ Выполнено ${formatDate(done)}",
@@ -187,7 +187,7 @@ private fun CompleteStageDialog(
     FormDialog(
         onDismissRequest = onDismiss,
         message = error,
-        title = { Text(if (stage.doneAt == null) stageTitle(stage.type) else "Изменить: ${stageTitle(stage.type)}") },
+        title = { Text(if (stage.doneAt == null) stage.displayTitle() else "Изменить: ${stage.displayTitle()}") },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),

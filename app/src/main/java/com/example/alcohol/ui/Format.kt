@@ -25,4 +25,9 @@ fun stageTitle(type: StageType): String = when (type) {
     StageType.CONDITIONING -> "Дображивание и дозревание"
     StageType.BOTTLING -> "Розлив"
     StageType.KEGGING -> "Розлив в кег"
+    StageType.CUSTOM -> "Этап"
 }
+
+/** Название этапа партии: своё, а у совсем старых записей по типу. */
+fun com.example.alcohol.data.BatchStage.displayTitle(): String = title.ifBlank { stageTitle(type) }
+

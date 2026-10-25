@@ -54,6 +54,7 @@ fun DrinkScreen(drinkType: DrinkType) {
     var brewing by remember { mutableStateOf<Recipe?>(null) }
     var showRecipeDialog by remember { mutableStateOf(false) }
     var showResources by remember { mutableStateOf(false) }
+    var showStages by remember { mutableStateOf(false) }
     /** Рецепт, который сейчас редактируем. null — создаём новый. */
     var editingRecipe by remember { mutableStateOf<Recipe?>(null) }
     var deletingRecipe by remember { mutableStateOf<Recipe?>(null) }
@@ -72,12 +73,19 @@ fun DrinkScreen(drinkType: DrinkType) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Button(onClick = {
                     editingRecipe = null
                     showRecipeDialog = true
                 }) { Text("Новый рецепт") }
-                OutlinedButton(onClick = { showResources = true }) { Text("Ресурс") }
+                OutlinedButton(
+                    onClick = { showResources = true },
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                ) { Text("Ресурс") }
+                OutlinedButton(
+                    onClick = { showStages = true },
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                ) { Text("Этапы") }
             }
         }
 
@@ -149,7 +157,7 @@ fun DrinkScreen(drinkType: DrinkType) {
                                 .isBefore(LocalDate.now())
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                "Дальше: ${stageTitle(next)} · ${planned?.let { formatDate(it) } ?: "не запланировано"}",
+                                "Дальше: ${summary.nextTitle?.ifBlank { null } ?: stageTitle(next)} · ${planned?.let { formatDate(it) } ?: "не запланировано"}",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = if (overdue) {
                                     MaterialTheme.colorScheme.error
@@ -164,6 +172,10 @@ fun DrinkScreen(drinkType: DrinkType) {
                 }
             }
         }
+    }
+
+    if (showStages) {
+        StagesDialog(warehouse = warehouse, drinkType = drinkType, onDismiss = { showStages = false })
     }
 
     if (showResources) {

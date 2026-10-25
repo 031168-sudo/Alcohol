@@ -115,7 +115,7 @@ object DeviceCalendars {
 private fun eventTitle(drinkType: DrinkType, summary: BatchSummary): String {
     val icon = if (drinkType == DrinkType.CIDER) "🍷" else "🍺"
     val kind = if (drinkType == DrinkType.CIDER) "Сидр" else "Пиво"
-    val action = stageTitle(summary.nextType!!).uppercase(Locale("ru"))
+    val action = (summary.nextTitle?.ifBlank { null } ?: stageTitle(summary.nextType!!)).uppercase(Locale("ru"))
     return "$icon $kind, партия ${formatDate(summary.batch.startedAt)}: $action"
 }
 

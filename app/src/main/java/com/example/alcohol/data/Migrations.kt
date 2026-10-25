@@ -7,6 +7,18 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * Категории ингредиентов теперь хранятся в таблице, а не в перечислении.
  * Идентификаторы стандартных категорий фиксированы: миграция и первая установка используют одни и те же.
  */
+object DefaultStages {
+    /** Стандартный процесс: пиво — первичное брожение и розлив; сидр — ещё перелив и дображивание. */
+    const val SEED_SQL =
+        "INSERT INTO stage_templates (drinkType, orderIndex, title, daysAfterPrevious, type) VALUES " +
+            "('BEER', 0, 'Первичное брожение', 0, 'PRIMARY'), " +
+            "('BEER', 1, 'Розлив', 8, 'BOTTLING'), " +
+            "('CIDER', 0, 'Первичное брожение', 0, 'PRIMARY'), " +
+            "('CIDER', 1, 'Перелив с осадка', 14, 'RACKING'), " +
+            "('CIDER', 2, 'Дображивание и дозревание', 21, 'CONDITIONING'), " +
+            "('CIDER', 3, 'Розлив', 14, 'BOTTLING')"
+}
+
 object Categories {
     const val SEED_SQL =
         "INSERT INTO categories (id, name) VALUES " +
@@ -131,5 +143,39 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
 val MIGRATION_8_9 = object : Migration(8, 9) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE `batch_stages` ADD COLUMN `calendarEventId` INTEGER")
+    }
+}
+
+/**
+ * Этапы редактируются: шаги процесса хранятся в таблице stage_templates, а у этапа партии
+ * есть своё название и срок. Существующие этапы и стандартный процесс остаются как были.
+ */
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `batch_stages` ADD COLUMN `title` TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE `batch_stages` ADD COLUMN `daysAfterPrevious` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL(
+            "UPDATE batch_stages SET title = CASE type " +
+                "WHEN 'MASHING' THEN 'Затирание' WHEN 'BOIL' THEN 'Варка' WHEN 'COOLING' THEN 'Охлаждение' " +
+                "WHEN 'PRIMARY' THEN 'Первичное брожение' WHEN 'RACKING' THEN 'Перелив с осадка' " +
+                "WHEN 'SECONDARY' THEN 'Вторичное брожение' WHEN 'CONDITIONING' THEN 'Дображивание и дозревание' " +
+                "WHEN 'BOTTLING' THEN 'Розлив' WHEN 'KEGGING' THEN 'Розлив в кег' ELSE 'Этап' END"
+        )
+        db.execSQL(
+            "UPDATE batch_stages SET daysAfterPrevious = CASE " +
+                "WHEN type = 'BOTTLING' AND batchId IN (SELECT id FROM batches WHERE drinkType = 'BEER') THEN 8 " +
+                "WHEN type = 'BOTTLING' THEN 14 WHEN type = 'RACKING' THEN 14 WHEN type = 'CONDITIONING' THEN 21 " +
+                "ELSE 0 END"
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `stage_templates` (" +
+                "`id` INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, " +
+                "`drinkType` TEXT NOT NULL, " +
+                "`orderIndex` INTEGER NOT NULL, " +
+                "`title` TEXT NOT NULL, " +
+                "`daysAfterPrevious` INTEGER NOT NULL, " +
+                "`type` TEXT NOT NULL)"
+        )
+        db.execSQL(DefaultStages.SEED_SQL)
     }
 }

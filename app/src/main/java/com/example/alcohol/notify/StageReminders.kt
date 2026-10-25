@@ -37,7 +37,7 @@ class StageReminderWorker(context: Context, params: WorkerParameters) : Coroutin
             val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentTitle(stage.batchName)
-                .setContentText("Пора: ${stageTitle(stage.type)}")
+                .setContentText("Пора: ${stage.title.ifBlank { stageTitle(stage.type) }}")
                 .setAutoCancel(true)
                 .build()
             // Идентификатор этапа: повторный запуск обновит уведомление, а не продублирует его.

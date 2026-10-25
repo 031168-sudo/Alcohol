@@ -7,7 +7,7 @@ import androidx.room.PrimaryKey
 
 enum class DrinkType { BEER, CIDER }
 
-enum class StageType { MASHING, BOIL, COOLING, PRIMARY, RACKING, SECONDARY, CONDITIONING, BOTTLING, KEGGING }
+enum class StageType { MASHING, BOIL, COOLING, PRIMARY, RACKING, SECONDARY, CONDITIONING, BOTTLING, KEGGING, CUSTOM }
 
 /** Категория ингредиентов, например «Солод» или «Хмель». Редактируется пользователем. */
 @Entity(tableName = "categories")
@@ -144,4 +144,8 @@ data class BatchStage(
     val notes: String = "",
     /** Id события в календаре телефона, если этап уже занесён туда. Null, если нет. */
     val calendarEventId: Long? = null,
+    /** Название этапа. Пустое у совсем старых записей: тогда берётся название по типу. */
+    val title: String = "",
+    /** Через сколько дней после предыдущего этапа он наступает: по нему пересчитывается прогноз. */
+    val daysAfterPrevious: Int = 0,
 )

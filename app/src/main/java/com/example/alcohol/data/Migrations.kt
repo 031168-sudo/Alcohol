@@ -179,3 +179,24 @@ val MIGRATION_9_10 = object : Migration(9, 10) {
         db.execSQL(DefaultStages.SEED_SQL)
     }
 }
+
+/**
+ * Этапы партий связаны с шагами общего процесса (templateId), имеют своё место (orderIndex)
+ * и могут быть отменены (cancelled). Существующие этапы связываются с шагами по типу.
+ */
+val MIGRATION_10_11 = object : Migration(10, 11) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `batch_stages` ADD COLUMN `templateId` INTEGER")
+        db.execSQL("ALTER TABLE `batch_stages` ADD COLUMN `orderIndex` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE `batch_stages` ADD COLUMN `cancelled` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL(
+            "UPDATE batch_stages SET orderIndex = " +
+                "(SELECT COUNT(*) FROM batch_stages o WHERE o.batchId = batch_stages.batchId AND o.id < batch_stages.id)"
+        )
+        db.execSQL(
+            "UPDATE batch_stages SET templateId = " +
+                "(SELECT t.id FROM stage_templates t JOIN batches b ON b.drinkType = t.drinkType " +
+                "WHERE b.id = batch_stages.batchId AND t.type = batch_stages.type LIMIT 1)"
+        )
+    }
+}

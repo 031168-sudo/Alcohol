@@ -23,6 +23,8 @@ sealed interface BrewResult {
  * Склад, категории, рецепты, варка и этапы партий.
  * Закупки пополняют остатки, варка списывает их по FIFO и фиксирует стоимость партии.
  */
+private const val STAGE_DAY_MS = 24L * 60 * 60 * 1000
+
 class Warehouse(private val db: AppDatabase) {
 
     private val stockDao = db.stockDao()
@@ -181,6 +183,7 @@ class Warehouse(private val db: AppDatabase) {
             stageTemplateDao.insert(
                 StageTemplate(drinkType = type, orderIndex = next, title = clean, daysAfterPrevious = daysAfterPrevious)
             )
+            resyncBatches(type)
         }
     }
 
@@ -188,11 +191,20 @@ class Warehouse(private val db: AppDatabase) {
         val clean = title.trim()
         require(clean.isNotEmpty()) { "Укажи название этапа" }
         require(daysAfterPrevious >= 0) { "Срок не может быть отрицательным" }
-        val current = stageTemplateDao.get(id) ?: return
-        stageTemplateDao.update(current.copy(title = clean, daysAfterPrevious = daysAfterPrevious))
+        db.withTransaction {
+            val current = stageTemplateDao.get(id) ?: return@withTransaction
+            stageTemplateDao.update(current.copy(title = clean, daysAfterPrevious = daysAfterPrevious))
+            resyncBatches(current.drinkType)
+        }
     }
 
-    suspend fun deleteStageTemplate(id: Long) = stageTemplateDao.delete(id)
+    suspend fun deleteStageTemplate(id: Long) {
+        db.withTransaction {
+            val current = stageTemplateDao.get(id) ?: return@withTransaction
+            stageTemplateDao.delete(id)
+            resyncBatches(current.drinkType)
+        }
+    }
 
     /** Двигает шаг на одно место вверх или вниз. */
     suspend fun moveStageTemplate(id: Long, up: Boolean) {
@@ -206,6 +218,7 @@ class Warehouse(private val db: AppDatabase) {
             list.forEachIndexed { i, template ->
                 if (template.orderIndex != i) stageTemplateDao.update(template.copy(orderIndex = i))
             }
+            resyncBatches(current.drinkType)
         }
     }
 
@@ -348,6 +361,8 @@ class Warehouse(private val db: AppDatabase) {
                         plannedAt = planned[i],
                         title = step.title,
                         daysAfterPrevious = step.daysAfterPrevious,
+                        templateId = step.id,
+                        orderIndex = i,
                     )
                 }
             )
@@ -531,12 +546,96 @@ class Warehouse(private val db: AppDatabase) {
                 )
             )
 
-            // Следующие этапы (по порядку) отсчитываются от фактической даты этого этапа.
-            val following = batchDao.stagesOnce(batch.id).filter { it.id > stage.id }
-            val newPlan = StagePlanner.replanAfter(following.map { it.daysAfterPrevious }, doneAt)
-            following.forEachIndexed { i, next ->
-                if (next.doneAt == null) batchDao.updateStage(next.copy(plannedAt = newPlan[i]))
+            // Следующие этапы отсчитываются от фактической даты этого этапа.
+            replanBatch(batch.id)
+        }
+    }
+
+    /**
+     * Пересчитывает плановые даты ещё не выполненных этапов партии: считаем от даты постановки,
+     * а после каждого выполненного этапа заново от его фактической даты. Отменённые этапы не считаются.
+     */
+    private suspend fun replanBatch(batchId: Long) {
+        val batch = batchDao.batchOnce(batchId) ?: return
+        var cursor = batch.startedAt
+        for (stage in batchDao.stagesOnce(batchId)) {
+            if (stage.cancelled) continue
+            cursor += stage.daysAfterPrevious * STAGE_DAY_MS
+            val done = stage.doneAt
+            if (done != null) {
+                cursor = done
+            } else if (stage.plannedAt != cursor) {
+                batchDao.updateStage(stage.copy(plannedAt = cursor))
             }
+        }
+    }
+
+    /** Отменяет этап в этой партии или возвращает его. Отменённый этап не ждём и в сроках не учитываем. */
+    suspend fun setStageCancelled(stageId: Long, cancelled: Boolean) {
+        db.withTransaction {
+            val stage = batchDao.stage(stageId) ?: return@withTransaction
+            batchDao.updateStage(stage.copy(cancelled = cancelled))
+            replanBatch(stage.batchId)
+        }
+    }
+
+    /** Снимает отметку о выполнении: этап снова ждёт, а прогноз пересчитывается. */
+    suspend fun reopenStage(stageId: Long) {
+        db.withTransaction {
+            val stage = batchDao.stage(stageId) ?: return@withTransaction
+            batchDao.updateStage(stage.copy(doneAt = null))
+            replanBatch(stage.batchId)
+        }
+    }
+
+    /**
+     * Приводит этапы всех партий напитка в соответствие с общим процессом:
+     * новые шаги появляются в партиях, названия и сроки обновляются, порядок повторяет процесс.
+     * Удалённый из процесса шаг уходит из партий, где не выполнен; выполненный остаётся как история.
+     */
+    private suspend fun resyncBatches(type: DrinkType) {
+        val template = stageTemplateDao.allOnce(type)
+        val byId = template.associateBy { it.id }
+        val indexOf = template.withIndex().associate { it.value.id to it.index }
+
+        for (batch in batchDao.batchesOfType(type)) {
+            val keep = mutableListOf<BatchStage>()
+            for (stage in batchDao.stagesOnce(batch.id)) {
+                val templateId = stage.templateId
+                if (templateId != null && templateId !in byId) {
+                    if (stage.doneAt == null) {
+                        batchDao.deleteStage(stage.id)
+                    } else {
+                        keep += stage.copy(templateId = null)
+                    }
+                } else {
+                    keep += stage
+                }
+            }
+
+            val present = keep.mapNotNull { it.templateId }.toSet()
+            val added = template.filter { it.id !in present }.map {
+                BatchStage(batchId = batch.id, type = it.type, templateId = it.id)
+            }
+
+            // Порядок: шаги процесса идут как в процессе, а этапы без шага остаются после того, за которым шли.
+            class Item(val stage: BatchStage, val key: Double, val seq: Int)
+            var lastKey = -1.0
+            val items = keep.mapIndexed { i, stage ->
+                val templateId = stage.templateId
+                val key = if (templateId != null) indexOf.getValue(templateId).toDouble().also { lastKey = it } else lastKey + 0.5
+                Item(stage, key, i)
+            } + added.mapIndexed { i, stage ->
+                Item(stage, indexOf.getValue(stage.templateId!!).toDouble(), keep.size + i)
+            }
+
+            items.sortedWith(compareBy({ it.key }, { it.seq })).forEachIndexed { position, item ->
+                val step = item.stage.templateId?.let { byId[it] }
+                var stage = item.stage.copy(orderIndex = position)
+                if (step != null) stage = stage.copy(title = step.title, daysAfterPrevious = step.daysAfterPrevious)
+                if (stage.id == 0L) batchDao.insertStage(stage) else batchDao.updateStage(stage)
+            }
+            replanBatch(batch.id)
         }
     }
 

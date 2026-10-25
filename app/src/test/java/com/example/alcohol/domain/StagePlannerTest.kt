@@ -16,14 +16,6 @@ class StagePlannerTest {
     }
 
     @Test
-    fun replanStartsFromActualDate() {
-        val actual = start + 3 * day   // этап выполнен на три дня позже
-        val replanned = StagePlanner.replanAfter(listOf(8), actual)
-
-        assertEquals(listOf(actual + 8 * day), replanned)
-    }
-
-    @Test
     fun ciderPlanIsCumulative() {
         val plan = StagePlanner.plan(listOf(0, 14, 21, 14), start)
 

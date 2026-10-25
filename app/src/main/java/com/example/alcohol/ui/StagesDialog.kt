@@ -55,7 +55,7 @@ fun StagesDialog(warehouse: Warehouse, drinkType: DrinkType, onDismiss: () -> Un
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
-                    "Эти этапы получает каждая новая партия. Уже сваренные партии остаются как есть.",
+                    "Изменения применяются и к уже сваренным партиям: новый этап появится в них, названия и сроки обновятся. Удалённый этап уйдёт из партий, где он ещё не выполнен. В партии любой этап можно отменить или отметить выполненным.",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 if (steps.isEmpty()) Text("Этапов нет: новые партии будут без этапов")
@@ -108,7 +108,7 @@ fun StagesDialog(warehouse: Warehouse, drinkType: DrinkType, onDismiss: () -> Un
     }
     deleting?.let { step ->
         ConfirmDeleteDialog(
-            text = "Этап «${step.title}» уберётся из процесса. Уже сваренные партии не изменятся.",
+            text = "Этап «${step.title}» уберётся из процесса и из партий, где он ещё не выполнен. Выполненные этапы в партиях останутся.",
             onConfirm = { scope.launch { warehouse.deleteStageTemplate(step.id) } },
             onDismiss = { deleting = null },
         )

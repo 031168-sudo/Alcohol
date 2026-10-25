@@ -45,19 +45,21 @@ interface BatchDao {
                 SELECT 1 FROM batch_stages s
                 WHERE s.batchId = b.id AND s.type IN ('BOTTLING', 'KEGGING') AND s.doneAt IS NOT NULL
             ) OR (
-                EXISTS (SELECT 1 FROM batch_stages s WHERE s.batchId = b.id)
-                AND NOT EXISTS (SELECT 1 FROM batch_stages s WHERE s.batchId = b.id AND s.doneAt IS NULL)
+                EXISTS (SELECT 1 FROM batch_stages s WHERE s.batchId = b.id AND s.doneAt IS NOT NULL)
+                AND NOT EXISTS (
+                    SELECT 1 FROM batch_stages s WHERE s.batchId = b.id AND s.doneAt IS NULL AND s.cancelled = 0
+                )
             )) AS bottled,
             (SELECT s.type FROM batch_stages s
-                WHERE s.batchId = b.id AND s.doneAt IS NULL ORDER BY s.id LIMIT 1) AS nextType,
+                WHERE s.batchId = b.id AND s.doneAt IS NULL AND s.cancelled = 0 ORDER BY s.orderIndex, s.id LIMIT 1) AS nextType,
             (SELECT s.plannedAt FROM batch_stages s
-                WHERE s.batchId = b.id AND s.doneAt IS NULL ORDER BY s.id LIMIT 1) AS nextPlannedAt,
+                WHERE s.batchId = b.id AND s.doneAt IS NULL AND s.cancelled = 0 ORDER BY s.orderIndex, s.id LIMIT 1) AS nextPlannedAt,
             (SELECT s.id FROM batch_stages s
-                WHERE s.batchId = b.id AND s.doneAt IS NULL ORDER BY s.id LIMIT 1) AS nextStageId,
+                WHERE s.batchId = b.id AND s.doneAt IS NULL AND s.cancelled = 0 ORDER BY s.orderIndex, s.id LIMIT 1) AS nextStageId,
             (SELECT s.calendarEventId FROM batch_stages s
-                WHERE s.batchId = b.id AND s.doneAt IS NULL ORDER BY s.id LIMIT 1) AS nextEventId,
+                WHERE s.batchId = b.id AND s.doneAt IS NULL AND s.cancelled = 0 ORDER BY s.orderIndex, s.id LIMIT 1) AS nextEventId,
             (SELECT s.title FROM batch_stages s
-                WHERE s.batchId = b.id AND s.doneAt IS NULL ORDER BY s.id LIMIT 1) AS nextTitle
+                WHERE s.batchId = b.id AND s.doneAt IS NULL AND s.cancelled = 0 ORDER BY s.orderIndex, s.id LIMIT 1) AS nextTitle
         FROM batches b
         LEFT JOIN batch_ingredients bi ON bi.batchId = b.id
         WHERE b.drinkType = :type
@@ -70,13 +72,13 @@ interface BatchDao {
     @Query("SELECT * FROM batches WHERE id = :batchId")
     fun batch(batchId: Long): Flow<Batch?>
 
-    @Query("SELECT * FROM batch_stages WHERE batchId = :batchId ORDER BY id")
+    @Query("SELECT * FROM batch_stages WHERE batchId = :batchId ORDER BY orderIndex, id")
     fun stages(batchId: Long): Flow<List<BatchStage>>
 
     @Query("SELECT * FROM batches WHERE id = :batchId")
     suspend fun batchOnce(batchId: Long): Batch?
 
-    @Query("SELECT * FROM batch_stages WHERE batchId = :batchId ORDER BY id")
+    @Query("SELECT * FROM batch_stages WHERE batchId = :batchId ORDER BY orderIndex, id")
     suspend fun stagesOnce(batchId: Long): List<BatchStage>
 
     @Query("SELECT * FROM batch_stages WHERE id = :stageId")
@@ -87,7 +89,7 @@ interface BatchDao {
         SELECT s.id AS stageId, b.name AS batchName, s.type AS type, s.plannedAt AS plannedAt, s.title AS title
         FROM batch_stages s
         JOIN batches b ON b.id = s.batchId
-        WHERE s.doneAt IS NULL AND s.plannedAt IS NOT NULL AND s.plannedAt <= :until
+        WHERE s.doneAt IS NULL AND s.cancelled = 0 AND s.plannedAt IS NOT NULL AND s.plannedAt <= :until
         ORDER BY s.plannedAt
         """
     )
@@ -126,6 +128,15 @@ interface BatchDao {
 
     @Insert
     suspend fun insertStages(stages: List<BatchStage>)
+
+    @Insert
+    suspend fun insertStage(stage: BatchStage): Long
+
+    @Query("DELETE FROM batch_stages WHERE id = :stageId")
+    suspend fun deleteStage(stageId: Long)
+
+    @Query("SELECT * FROM batches WHERE drinkType = :type")
+    suspend fun batchesOfType(type: DrinkType): List<Batch>
 
     @Update
     suspend fun updateStage(stage: BatchStage)

@@ -13,10 +13,4 @@ object StagePlanner {
             cursor
         }
     }
-
-    /**
-     * Пересчёт после фактического этапа: все следующие этапы отсчитываются
-     * от даты, когда этап реально выполнен. Сроки передаются в порядке следования.
-     */
-    fun replanAfter(followingDays: List<Int>, completedAt: Long): List<Long> = plan(followingDays, completedAt)
 }

@@ -15,12 +15,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -91,12 +93,12 @@ fun BatchDetailScreen(batchId: Long, onBack: () -> Unit) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(enabled = done == null) { completing = stage },
-                // Выполненные этапы подсвечены зелёным, невыполненные — нейтральным.
-                colors = if (done != null) {
-                    CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                } else {
-                    CardDefaults.cardColors()
+                    .clickable(enabled = done == null && !stage.cancelled) { completing = stage },
+                // Выполненные этапы подсвечены зелёным, отменённые серым, остальные нейтральные.
+                colors = when {
+                    stage.cancelled -> CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    done != null -> CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                    else -> CardDefaults.cardColors()
                 },
             ) {
                 Row(modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp, end = 4.dp)) {
@@ -114,6 +116,8 @@ fun BatchDetailScreen(batchId: Long, onBack: () -> Unit) {
                                 stage.notes.takeIf { it.isNotBlank() },
                             ).joinToString(" · ")
                             if (details.isNotEmpty()) Text(details, style = MaterialTheme.typography.bodySmall)
+                        } else if (stage.cancelled) {
+                            Text("Отменён в этой партии", style = MaterialTheme.typography.bodyMedium)
                         } else {
                             val planned = stage.plannedAt?.let { formatDate(it) } ?: "не запланировано"
                             Text("Прогноз: $planned. Нажми, чтобы отметить.", style = MaterialTheme.typography.bodyMedium)
@@ -123,6 +127,15 @@ fun BatchDetailScreen(batchId: Long, onBack: () -> Unit) {
                     if (done != null) {
                         IconButton(onClick = { completing = stage }) {
                             Icon(Icons.Default.Edit, contentDescription = "Изменить этап")
+                        }
+                    } else if (stage.cancelled) {
+                        TextButton(onClick = { scope.launch { warehouse.setStageCancelled(stage.id, false) } }) {
+                            Text("Вернуть")
+                        }
+                    } else {
+                        // Ненужный этап в этой партии можно отменить: его не ждём, потом можно вернуть.
+                        IconButton(onClick = { scope.launch { warehouse.setStageCancelled(stage.id, true) } }) {
+                            Icon(Icons.Default.Close, contentDescription = "Отменить этап")
                         }
                     }
                 }
@@ -162,6 +175,11 @@ fun BatchDetailScreen(batchId: Long, onBack: () -> Unit) {
         CompleteStageDialog(
             stage = stage,
             onDismiss = { completing = null },
+            onReopen = if (stage.doneAt != null) {
+                { scope.launch { warehouse.reopenStage(stage.id); completing = null } }
+            } else {
+                null
+            },
             onSave = { doneAt, temperature, gravity, notes ->
                 scope.launch {
                     warehouse.completeStage(stage.id, doneAt, temperature, gravity, notes)
@@ -176,6 +194,7 @@ fun BatchDetailScreen(batchId: Long, onBack: () -> Unit) {
 private fun CompleteStageDialog(
     stage: BatchStage,
     onDismiss: () -> Unit,
+    onReopen: (() -> Unit)?,
     onSave: (doneAt: Long, temperatureC: Double?, gravity: Double?, notes: String) -> Unit,
 ) {
     var dateText by remember { mutableStateOf(formatDate(stage.doneAt ?: stage.plannedAt ?: System.currentTimeMillis())) }
@@ -215,6 +234,11 @@ private fun CompleteStageDialog(
                     onValueChange = { notes = it },
                     label = { Text("Заметки") },
                 )
+                if (onReopen != null) {
+                    OutlinedButton(onClick = onReopen, modifier = Modifier.fillMaxWidth()) {
+                        Text("Снять отметку о выполнении")
+                    }
+                }
             }
         },
         confirmButton = {

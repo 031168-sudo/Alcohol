@@ -157,7 +157,7 @@ fun DrinkScreen(drinkType: DrinkType) {
                                 .isBefore(LocalDate.now())
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                "Дальше: ${summary.nextTitle?.ifBlank { null } ?: stageTitle(next)} · ${planned?.let { formatDate(it) } ?: "не запланировано"}",
+                                "Дальше: ${stageLabel(summary.nextIcon, summary.nextTitle?.ifBlank { null } ?: stageTitle(next))} · ${planned?.let { formatDate(it) } ?: "не запланировано"}",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = if (overdue) {
                                     MaterialTheme.colorScheme.error

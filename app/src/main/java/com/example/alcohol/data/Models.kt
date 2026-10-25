@@ -154,4 +154,6 @@ data class BatchStage(
     val orderIndex: Int = 0,
     /** Этап отменён в этой партии: не ждём его, он не влияет на «Дальше» и сроки. */
     val cancelled: Boolean = false,
+    /** Эмодзи в начале названия этапа. Пустой, если не задан. */
+    val icon: String = "",
 )

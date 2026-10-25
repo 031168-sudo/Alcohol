@@ -3,12 +3,19 @@ package com.example.alcohol.data
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-/**
- * Категории ингредиентов теперь хранятся в таблице, а не в перечислении.
- * Идентификаторы стандартных категорий фиксированы: миграция и первая установка используют одни и те же.
- */
+/** Стандартный процесс: пиво — первичное брожение и розлив; сидр — ещё перелив и дображивание. */
 object DefaultStages {
-    /** Стандартный процесс: пиво — первичное брожение и розлив; сидр — ещё перелив и дображивание. */
+    /** Стандартный процесс со значками: для первой установки (таблица уже со столбцом icon). */
+    const val SEED_WITH_ICONS_SQL =
+        "INSERT INTO stage_templates (drinkType, orderIndex, title, daysAfterPrevious, type, icon) VALUES " +
+            "('BEER', 0, 'Первичное брожение', 0, 'PRIMARY', '🧪'), " +
+            "('BEER', 1, 'Розлив', 8, 'BOTTLING', '🍾'), " +
+            "('CIDER', 0, 'Первичное брожение', 0, 'PRIMARY', '🧪'), " +
+            "('CIDER', 1, 'Перелив с осадка', 14, 'RACKING', '🔄'), " +
+            "('CIDER', 2, 'Дображивание и дозревание', 21, 'CONDITIONING', '⏳'), " +
+            "('CIDER', 3, 'Розлив', 14, 'BOTTLING', '🍾')"
+
+    /** Стандартный процесс без значков: его использует миграция 9 → 10, когда столбца icon ещё нет. */
     const val SEED_SQL =
         "INSERT INTO stage_templates (drinkType, orderIndex, title, daysAfterPrevious, type) VALUES " +
             "('BEER', 0, 'Первичное брожение', 0, 'PRIMARY'), " +
@@ -19,6 +26,10 @@ object DefaultStages {
             "('CIDER', 3, 'Розлив', 14, 'BOTTLING')"
 }
 
+/**
+ * Категории ингредиентов теперь хранятся в таблице, а не в перечислении.
+ * Идентификаторы стандартных категорий фиксированы: миграция и первая установка используют одни и те же.
+ */
 object Categories {
     const val SEED_SQL =
         "INSERT INTO categories (id, name) VALUES " +
@@ -198,5 +209,19 @@ val MIGRATION_10_11 = object : Migration(10, 11) {
                 "(SELECT t.id FROM stage_templates t JOIN batches b ON b.drinkType = t.drinkType " +
                 "WHERE b.id = batch_stages.batchId AND t.type = batch_stages.type LIMIT 1)"
         )
+    }
+}
+
+/** У этапов появился эмодзи в начале названия. Существующим этапам подбираем значок по типу. */
+val MIGRATION_11_12 = object : Migration(11, 12) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `stage_templates` ADD COLUMN `icon` TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE `batch_stages` ADD COLUMN `icon` TEXT NOT NULL DEFAULT ''")
+        val byType =
+            "CASE type WHEN 'MASHING' THEN '🌾' WHEN 'BOIL' THEN '🔥' WHEN 'COOLING' THEN '❄️' " +
+                "WHEN 'PRIMARY' THEN '🧪' WHEN 'RACKING' THEN '🔄' WHEN 'SECONDARY' THEN '🫧' " +
+                "WHEN 'CONDITIONING' THEN '⏳' WHEN 'BOTTLING' THEN '🍾' WHEN 'KEGGING' THEN '🍻' ELSE '' END"
+        db.execSQL("UPDATE stage_templates SET icon = $byType")
+        db.execSQL("UPDATE batch_stages SET icon = $byType")
     }
 }

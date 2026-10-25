@@ -21,6 +21,8 @@ data class StageTemplate(
     val daysAfterPrevious: Int,
     /** Тип нужен для отметки «разлито» (BOTTLING, KEGGING). У добавленных вручную шагов — CUSTOM. */
     val type: StageType = StageType.CUSTOM,
+    /** Эмодзи в начале названия этапа. Пустой, если не задан. */
+    val icon: String = "",
 )
 
 @Dao

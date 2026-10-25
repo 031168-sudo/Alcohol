@@ -1,6 +1,15 @@
 package com.example.alcohol.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -61,7 +70,7 @@ fun StagesDialog(warehouse: Warehouse, drinkType: DrinkType, onDismiss: () -> Un
                 if (steps.isEmpty()) Text("Этапов нет: новые партии будут без этапов")
                 steps.forEachIndexed { index, step ->
                     Column {
-                        Text("${index + 1}. ${step.title}", style = MaterialTheme.typography.titleSmall)
+                        Text("${index + 1}. ${stageLabel(step.icon, step.title)}", style = MaterialTheme.typography.titleSmall)
                         Text(
                             if (index == 0) {
                                 "через ${step.daysAfterPrevious} дн. после постановки"
@@ -108,7 +117,7 @@ fun StagesDialog(warehouse: Warehouse, drinkType: DrinkType, onDismiss: () -> Un
     }
     deleting?.let { step ->
         ConfirmDeleteDialog(
-            text = "Этап «${step.title}» уберётся из процесса и из партий, где он ещё не выполнен. Выполненные этапы в партиях останутся.",
+            text = "Этап «${stageLabel(step.icon, step.title)}» уберётся из процесса и из партий, где он ещё не выполнен. Выполненные этапы в партиях останутся.",
             onConfirm = { scope.launch { warehouse.deleteStageTemplate(step.id) } },
             onDismiss = { deleting = null },
         )
@@ -125,6 +134,7 @@ private fun StageEditDialog(
     val scope = rememberCoroutineScope()
     var title by remember { mutableStateOf(existing?.title ?: "") }
     var daysText by remember { mutableStateOf(existing?.daysAfterPrevious?.toString() ?: "") }
+    var icon by remember { mutableStateOf(existing?.icon ?: "") }
     var error by remember { mutableStateOf<String?>(null) }
 
     FormDialog(
@@ -141,6 +151,34 @@ private fun StageEditDialog(
                     onValueChange = { title = it },
                     label = { Text("Название, например «Розлив»") },
                     singleLine = true,
+                )
+                Text("Значок", style = MaterialTheme.typography.titleSmall)
+                // Таблица значков: нажми на нужный, повторное нажатие снимает выбор.
+                stageEmojis.chunked(EMOJI_COLUMNS).forEach { rowEmojis ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        rowEmojis.forEach { emoji ->
+                            val selected = emoji == icon
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(
+                                        if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                                    )
+                                    .border(
+                                        width = if (selected) 2.dp else 1.dp,
+                                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                                        shape = RoundedCornerShape(12.dp),
+                                    )
+                                    .clickable { icon = if (selected) "" else emoji },
+                                contentAlignment = Alignment.Center,
+                            ) { Text(emoji, fontSize = 26.sp) }
+                        }
+                    }
+                }
+                Text(
+                    "Выбрано: ${stageLabel(icon, title.ifBlank { "название этапа" })}",
+                    style = MaterialTheme.typography.bodyMedium,
                 )
                 OutlinedTextField(
                     value = daysText,
@@ -165,9 +203,9 @@ private fun StageEditDialog(
                         scope.launch {
                             try {
                                 if (existing == null) {
-                                    warehouse.addStageTemplate(drinkType, title, days)
+                                    warehouse.addStageTemplate(drinkType, title, days, icon)
                                 } else {
-                                    warehouse.updateStageTemplate(existing.id, title, days)
+                                    warehouse.updateStageTemplate(existing.id, title, days, icon)
                                 }
                                 onDismiss()
                             } catch (e: IllegalArgumentException) {
@@ -181,3 +219,15 @@ private fun StageEditDialog(
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Отмена") } },
     )
 }
+
+private const val EMOJI_COLUMNS = 6
+
+/** Таблица значков для этапов: брожение, карбонизация, розлив, перелив, дозревание и другое. */
+private val stageEmojis = listOf(
+    "🌾", "🔥", "❄️", "🧊", "🌡️", "🧪",
+    "🫧", "🍾", "🍺", "🍻", "🍷", "🥂",
+    "🍎", "🍏", "🍇", "🍯", "🍋", "🌿",
+    "🔄", "⏳", "⏰", "📅", "🔍", "✅",
+    "🧹", "💧", "🧂", "🪣", "🔔", "📦",
+    "🥃", "🛢️", "⚗️", "🧫", "⭐", "❤️",
+)

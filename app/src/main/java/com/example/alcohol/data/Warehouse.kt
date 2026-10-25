@@ -174,26 +174,26 @@ class Warehouse(private val db: AppDatabase) {
     /** Общий процесс для напитка: шаги, из которых создаются этапы новых партий. */
     fun stageTemplates(type: DrinkType): Flow<List<StageTemplate>> = stageTemplateDao.all(type)
 
-    suspend fun addStageTemplate(type: DrinkType, title: String, daysAfterPrevious: Int) {
+    suspend fun addStageTemplate(type: DrinkType, title: String, daysAfterPrevious: Int, icon: String) {
         val clean = title.trim()
         require(clean.isNotEmpty()) { "Укажи название этапа" }
         require(daysAfterPrevious >= 0) { "Срок не может быть отрицательным" }
         db.withTransaction {
             val next = (stageTemplateDao.allOnce(type).maxOfOrNull { it.orderIndex } ?: -1) + 1
             stageTemplateDao.insert(
-                StageTemplate(drinkType = type, orderIndex = next, title = clean, daysAfterPrevious = daysAfterPrevious)
+                StageTemplate(drinkType = type, orderIndex = next, title = clean, daysAfterPrevious = daysAfterPrevious, icon = icon.trim())
             )
             resyncBatches(type)
         }
     }
 
-    suspend fun updateStageTemplate(id: Long, title: String, daysAfterPrevious: Int) {
+    suspend fun updateStageTemplate(id: Long, title: String, daysAfterPrevious: Int, icon: String) {
         val clean = title.trim()
         require(clean.isNotEmpty()) { "Укажи название этапа" }
         require(daysAfterPrevious >= 0) { "Срок не может быть отрицательным" }
         db.withTransaction {
             val current = stageTemplateDao.get(id) ?: return@withTransaction
-            stageTemplateDao.update(current.copy(title = clean, daysAfterPrevious = daysAfterPrevious))
+            stageTemplateDao.update(current.copy(title = clean, daysAfterPrevious = daysAfterPrevious, icon = icon.trim()))
             resyncBatches(current.drinkType)
         }
     }
@@ -363,6 +363,7 @@ class Warehouse(private val db: AppDatabase) {
                         daysAfterPrevious = step.daysAfterPrevious,
                         templateId = step.id,
                         orderIndex = i,
+                        icon = step.icon,
                     )
                 }
             )
@@ -632,7 +633,7 @@ class Warehouse(private val db: AppDatabase) {
             items.sortedWith(compareBy({ it.key }, { it.seq })).forEachIndexed { position, item ->
                 val step = item.stage.templateId?.let { byId[it] }
                 var stage = item.stage.copy(orderIndex = position)
-                if (step != null) stage = stage.copy(title = step.title, daysAfterPrevious = step.daysAfterPrevious)
+                if (step != null) stage = stage.copy(title = step.title, daysAfterPrevious = step.daysAfterPrevious, icon = step.icon)
                 if (stage.id == 0L) batchDao.insertStage(stage) else batchDao.updateStage(stage)
             }
             replanBatch(batch.id)

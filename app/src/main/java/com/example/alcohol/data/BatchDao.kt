@@ -21,6 +21,7 @@ data class BatchSummary(
     val nextEventId: Long?,
     /** Название следующего этапа (пустое у совсем старых записей). */
     val nextTitle: String?,
+    val nextIcon: String?,
 )
 
 /** Этап, который скоро наступает или уже просрочен, для напоминаний. */
@@ -30,6 +31,7 @@ data class DueStage(
     val type: StageType,
     val plannedAt: Long,
     val title: String,
+    val icon: String,
 )
 
 @Dao
@@ -59,7 +61,9 @@ interface BatchDao {
             (SELECT s.calendarEventId FROM batch_stages s
                 WHERE s.batchId = b.id AND s.doneAt IS NULL AND s.cancelled = 0 ORDER BY s.orderIndex, s.id LIMIT 1) AS nextEventId,
             (SELECT s.title FROM batch_stages s
-                WHERE s.batchId = b.id AND s.doneAt IS NULL AND s.cancelled = 0 ORDER BY s.orderIndex, s.id LIMIT 1) AS nextTitle
+                WHERE s.batchId = b.id AND s.doneAt IS NULL AND s.cancelled = 0 ORDER BY s.orderIndex, s.id LIMIT 1) AS nextTitle,
+            (SELECT s.icon FROM batch_stages s
+                WHERE s.batchId = b.id AND s.doneAt IS NULL AND s.cancelled = 0 ORDER BY s.orderIndex, s.id LIMIT 1) AS nextIcon
         FROM batches b
         LEFT JOIN batch_ingredients bi ON bi.batchId = b.id
         WHERE b.drinkType = :type
@@ -86,7 +90,7 @@ interface BatchDao {
 
     @Query(
         """
-        SELECT s.id AS stageId, b.name AS batchName, s.type AS type, s.plannedAt AS plannedAt, s.title AS title
+        SELECT s.id AS stageId, b.name AS batchName, s.type AS type, s.plannedAt AS plannedAt, s.title AS title, s.icon AS icon
         FROM batch_stages s
         JOIN batches b ON b.id = s.batchId
         WHERE s.doneAt IS NULL AND s.cancelled = 0 AND s.plannedAt IS NOT NULL AND s.plannedAt <= :until

@@ -29,5 +29,10 @@ fun stageTitle(type: StageType): String = when (type) {
 }
 
 /** Название этапа партии: своё, а у совсем старых записей по типу. */
-fun com.example.alcohol.data.BatchStage.displayTitle(): String = title.ifBlank { stageTitle(type) }
+fun com.example.alcohol.data.BatchStage.displayTitle(): String =
+    stageLabel(icon, title.ifBlank { stageTitle(type) })
+
+/** «🍾 Розлив»: эмодзи, пробел и название. Если эмодзи нет, только название. */
+fun stageLabel(icon: String?, title: String): String =
+    if (icon.isNullOrBlank()) title else "${icon.trim()} $title"
 

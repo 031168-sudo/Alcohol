@@ -158,6 +158,15 @@ interface StockDao {
     )
     fun brewUsageOf(ingredientId: Long): Flow<List<BrewUsageRow>>
 
+    /** Варки по закупкам ингредиента: по одной строке на пару «закупка + варка». */
+    @Query(
+        "SELECT bi.purchaseId AS purchaseId, b.name AS batchName, b.startedAt AS startedAt, " +
+            "SUM(bi.amount) AS amount, SUM(bi.cost) AS cost " +
+            "FROM batch_ingredients bi JOIN batches b ON b.id = bi.batchId " +
+            "WHERE bi.ingredientId = :ingredientId GROUP BY bi.purchaseId, bi.batchId ORDER BY b.startedAt DESC"
+    )
+    fun brewUsageByPurchaseOf(ingredientId: Long): Flow<List<BrewUsageByPurchase>>
+
     @Query("DELETE FROM purchases WHERE id = :id")
     suspend fun deletePurchase(id: Long)
 

@@ -388,6 +388,9 @@ class Warehouse(private val db: AppDatabase) {
 
     fun brewUsageOf(ingredientId: Long): Flow<List<BrewUsageRow>> = stockDao.brewUsageOf(ingredientId)
 
+    fun brewUsageByPurchaseOf(ingredientId: Long): Flow<List<BrewUsageByPurchase>> =
+        stockDao.brewUsageByPurchaseOf(ingredientId)
+
     /**
      * Ручное списание: берём закупки, сделанные не позже даты списания, как при варке.
      * Возвращает нехватку (0, если всё списано).

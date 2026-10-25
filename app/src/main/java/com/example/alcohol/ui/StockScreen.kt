@@ -221,17 +221,19 @@ private data class WriteOffGroup(
     val ids: List<Long>,
 )
 
-/** Строка списка на карточке позиции: закупка или ручное списание. */
-private sealed interface LedgerEntry {
+/** Строка под закупкой: ручное списание или варка. */
+private sealed interface SubEntry {
     val at: Long
 
-    data class Bought(val purchase: Purchase) : LedgerEntry {
-        override val at: Long get() = purchase.purchasedAt
-    }
+    data class Manual(
+        override val at: Long,
+        val reason: String,
+        val amount: Double,
+        val cost: Double,
+        val sample: com.example.alcohol.data.WriteOff,
+    ) : SubEntry
 
-    data class WrittenOff(val group: WriteOffGroup) : LedgerEntry {
-        override val at: Long get() = group.at
-    }
+    data class Brew(override val at: Long, val batchName: String, val amount: Double, val cost: Double) : SubEntry
 }
 
 /** «дата · −25 г · −12 ₽»: списание со знаком минус, сумма в рублях красным. */
@@ -275,6 +277,18 @@ private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -
             loadError = "Списания не загрузились: $e"
         }
     }
+    val brewUses by androidx.compose.runtime.produceState(
+        initialValue = emptyList<com.example.alcohol.data.BrewUsageByPurchase>(),
+        key1 = row.ingredientId,
+    ) {
+        try {
+            warehouse.brewUsageByPurchaseOf(row.ingredientId).collect { value = it }
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            loadError = "Варки не загрузились: $e"
+        }
+    }
     var editing by remember { mutableStateOf<Purchase?>(null) }
     var deletingPurchase by remember { mutableStateOf<Purchase?>(null) }
     var deletingWriteOff by remember { mutableStateOf<WriteOffGroup?>(null) }
@@ -287,22 +301,18 @@ private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -
         onDismissRequest = onDismiss,
         title = { Text(row.name) },
         text = {
-        // Ручные списания: строки одного списания (одна дата и причина) показываются одной строкой.
-        val writeOffGroups = writeOffs
-            .groupBy { it.writtenOffAt to it.reason }
-            .map { (key, rows) ->
-                WriteOffGroup(
-                    at = key.first,
-                    reason = key.second,
-                    amount = rows.sumOf { it.amount },
-                    cost = rows.sumOf { it.cost },
-                    ids = rows.map { it.id },
-                )
-            }
-        // Закупки и списания одним списком по дате, новые сверху.
-        val ledger: List<LedgerEntry> = (
-            purchases.map { LedgerEntry.Bought(it) } + writeOffGroups.map { LedgerEntry.WrittenOff(it) }
-            ).sortedByDescending { it.at }
+        // Все строки одного ручного списания (одна дата и причина), в том числе из других закупок:
+        // изменение и удаление действуют на списание целиком.
+        val wholeWriteOff: (com.example.alcohol.data.WriteOff) -> WriteOffGroup = { w ->
+            val rows = writeOffs.filter { it.writtenOffAt == w.writtenOffAt && it.reason == w.reason }
+            WriteOffGroup(
+                at = w.writtenOffAt,
+                reason = w.reason,
+                amount = rows.sumOf { it.amount },
+                cost = rows.sumOf { it.cost },
+                ids = rows.map { it.id },
+            )
+        }
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -321,51 +331,66 @@ private fun PurchasesDialog(warehouse: Warehouse, row: StockRow, onDismiss: () -
                     Text("Списать")
                 }
                 loadError?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
-                if (ledger.isEmpty() && loadError == null) {
+                if (purchases.isEmpty() && loadError == null) {
                     Text("Закупок пока нет")
                 }
-                ledger.forEach { entry ->
-                    when (entry) {
-                        is LedgerEntry.Bought -> {
-                            val purchase = entry.purchase
-                            Column {
-                                Text(
-                                    "${formatDate(purchase.purchasedAt)} · %.1f %s · %.0f ₽".format(
-                                        purchase.quantity, row.unit, purchase.totalPrice,
-                                    ),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                                Text(
-                                    "Осталось %.1f %s".format(purchase.remaining, row.unit),
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                    IconButton(onClick = { editing = purchase }) {
-                                        Icon(Icons.Default.Edit, contentDescription = "Изменить закупку")
-                                    }
-                                    IconButton(onClick = { deletingPurchase = purchase }) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Удалить закупку")
-                                    }
+                purchases.forEach { purchase ->
+                    // Под каждой закупкой — всё, что из неё списано: ручные списания и варки, новые сверху.
+                    val subs = (
+                        writeOffs.filter { it.purchaseId == purchase.id }
+                            .groupBy { it.writtenOffAt to it.reason }
+                            .map { (key, rows) -> SubEntry.Manual(key.first, key.second, rows.sumOf { it.amount }, rows.sumOf { it.cost }, rows.first()) } +
+                            brewUses.filter { it.purchaseId == purchase.id }
+                                .map { SubEntry.Brew(it.startedAt, it.batchName, it.amount, it.cost) }
+                        ).sortedByDescending { it.at }
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                "${formatDate(purchase.purchasedAt)} · %.1f %s · %.0f ₽".format(
+                                    purchase.quantity, row.unit, purchase.totalPrice,
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                "Осталось %.1f %s".format(purchase.remaining, row.unit),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                IconButton(onClick = { editing = purchase }) {
+                                    Icon(Icons.Default.Edit, contentDescription = "Изменить закупку")
+                                }
+                                IconButton(onClick = { deletingPurchase = purchase }) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Удалить закупку")
                                 }
                             }
-                        }
-                        is LedgerEntry.WrittenOff -> {
-                            val group = entry.group
-                            Column {
-                                Text(
-                                    writeOffLine(formatDate(group.at), group.amount, row.unit, group.cost),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                                Text(
-                                    if (group.reason.isBlank()) "Списание" else "Списание: ${group.reason}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                    IconButton(onClick = { editingWriteOff = group }) {
-                                        Icon(Icons.Default.Edit, contentDescription = "Изменить списание")
-                                    }
-                                    IconButton(onClick = { deletingWriteOff = group }) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Удалить списание")
+                            subs.forEach { sub ->
+                                Column(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 4.dp)) {
+                                    when (sub) {
+                                        is SubEntry.Manual -> {
+                                            Text(
+                                                writeOffLine(formatDate(sub.at), sub.amount, row.unit, sub.cost),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                            )
+                                            Text(
+                                                if (sub.reason.isBlank()) "Списание" else "Списание: ${sub.reason}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                            )
+                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                                IconButton(onClick = { editingWriteOff = wholeWriteOff(sub.sample) }) {
+                                                    Icon(Icons.Default.Edit, contentDescription = "Изменить списание")
+                                                }
+                                                IconButton(onClick = { deletingWriteOff = wholeWriteOff(sub.sample) }) {
+                                                    Icon(Icons.Default.Delete, contentDescription = "Удалить списание")
+                                                }
+                                            }
+                                        }
+                                        is SubEntry.Brew -> {
+                                            Text(
+                                                writeOffLine(formatDate(sub.at), sub.amount, row.unit, sub.cost),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                            )
+                                            Text("Варка: ${sub.batchName}", style = MaterialTheme.typography.bodySmall)
+                                        }
                                     }
                                 }
                             }

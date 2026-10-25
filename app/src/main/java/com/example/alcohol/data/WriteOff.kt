@@ -25,3 +25,12 @@ data class BrewUsageRow(
     val amount: Double,
     val cost: Double,
 )
+
+/** Сколько одна варка взяла из конкретной закупки. */
+data class BrewUsageByPurchase(
+    val purchaseId: Long,
+    val batchName: String,
+    val startedAt: Long,
+    val amount: Double,
+    val cost: Double,
+)

@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
@@ -32,6 +34,7 @@ import com.example.alcohol.data.DrinkType
 import com.example.alcohol.notify.ensureChannel
 import com.example.alcohol.notify.scheduleStageReminders
 import com.example.alcohol.ui.AlcoholTheme
+import com.example.alcohol.ui.BackupScreen
 import com.example.alcohol.ui.CrashDialog
 import com.example.alcohol.ui.CrashReport
 import com.example.alcohol.ui.DrinkScreen
@@ -102,12 +105,19 @@ fun MainTabs(modifier: Modifier = Modifier) {
                 onClick = { selected = tabs.size },
                 icon = { Icon(TotalsChartIcon, contentDescription = "Итоги") },
             )
+            // Резервная копия и настройки данных. Тоже пиктограмма, чтобы не теснить подписи.
+            Tab(
+                selected = selected == tabs.size + 1,
+                onClick = { selected = tabs.size + 1 },
+                icon = { Icon(Icons.Default.Settings, contentDescription = "Данные") },
+            )
         }
         when (selected) {
             0 -> DrinkScreen(drinkType = DrinkType.BEER)
             1 -> DrinkScreen(drinkType = DrinkType.CIDER)
             2 -> StockScreen()
-            else -> TotalsScreen()
+            3 -> TotalsScreen()
+            else -> BackupScreen()
         }
     }
 }

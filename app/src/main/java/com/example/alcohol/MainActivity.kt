@@ -8,19 +8,27 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -29,7 +37,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.example.alcohol.backup.AutoBackupSettings
+import com.example.alcohol.backup.scheduleAutoBackup
 import com.example.alcohol.data.DrinkType
 import com.example.alcohol.notify.ensureChannel
 import com.example.alcohol.notify.scheduleStageReminders
@@ -52,6 +67,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         ensureChannel(this)
         scheduleStageReminders(this)
+        // Автосохранение могло быть включено раньше: восстанавливаем ежедневную задачу.
+        if (AutoBackupSettings.isEnabled(this)) scheduleAutoBackup(this)
         setContent {
             // Пастельная зелёная палитра; светлая или тёмная по системной теме.
             AlcoholTheme {
@@ -85,39 +102,100 @@ private fun NotificationPermission() {
 }
 
 private val tabs = listOf("Пиво", "Сидр", "Склад")
+private const val TOTALS_TAB = 3
+private const val DATA_TAB = 4
 
 @Composable
 fun MainTabs(modifier: Modifier = Modifier) {
     var selected by remember { mutableIntStateOf(0) }
 
     Column(modifier = modifier.fillMaxSize()) {
-        TabRow(selectedTabIndex = selected) {
-            tabs.forEachIndexed { index, title ->
-                Tab(
-                    selected = selected == index,
-                    onClick = { selected = index },
-                    text = { Text(title) },
-                )
-            }
-            // Итоги — пиктограмма вместо текста, в цвет остальных вкладок.
-            Tab(
-                selected = selected == tabs.size,
-                onClick = { selected = tabs.size },
-                icon = { Icon(TotalsChartIcon, contentDescription = "Итоги") },
-            )
-            // Резервная копия и настройки данных. Тоже пиктограмма, чтобы не теснить подписи.
-            Tab(
-                selected = selected == tabs.size + 1,
-                onClick = { selected = tabs.size + 1 },
-                icon = { Icon(Icons.Default.Settings, contentDescription = "Данные") },
-            )
-        }
+        MainTabRow(selected = selected, onSelect = { selected = it })
         when (selected) {
             0 -> DrinkScreen(drinkType = DrinkType.BEER)
             1 -> DrinkScreen(drinkType = DrinkType.CIDER)
             2 -> StockScreen()
-            3 -> TotalsScreen()
+            TOTALS_TAB -> TotalsScreen()
             else -> BackupScreen()
         }
+    }
+}
+
+/**
+ * Своя строка вкладок вместо TabRow: у Tab жёсткая минимальная ширина,
+ * из-за чего при крупном системном шрифте подписи переносились на две строки.
+ * Здесь пять равных ячеек, подпись всегда в одну строку, иконки не сдвигаются.
+ */
+@Composable
+private fun MainTabRow(selected: Int, onSelect: (Int) -> Unit) {
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .selectableGroup(),
+        ) {
+            tabs.forEachIndexed { index, title ->
+                TabCell(
+                    selected = selected == index,
+                    modifier = Modifier.weight(1f),
+                    onClick = { onSelect(index) },
+                ) {
+                    Text(
+                        title,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+            }
+            TabCell(
+                selected = selected == TOTALS_TAB,
+                modifier = Modifier.weight(1f),
+                onClick = { onSelect(TOTALS_TAB) },
+            ) {
+                Icon(TotalsChartIcon, contentDescription = "Итоги")
+            }
+            TabCell(
+                selected = selected == DATA_TAB,
+                modifier = Modifier.weight(1f),
+                onClick = { onSelect(DATA_TAB) },
+            ) {
+                Icon(Icons.Default.Settings, contentDescription = "Данные")
+            }
+        }
+        HorizontalDivider()
+    }
+}
+
+@Composable
+private fun TabCell(
+    selected: Boolean,
+    modifier: Modifier,
+    onClick: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .selectable(selected = selected, onClick = onClick, role = Role.Tab),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center,
+        ) {
+            CompositionLocalProvider(LocalContentColor provides color) { content() }
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(3.dp)
+                .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent),
+        )
     }
 }

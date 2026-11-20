@@ -4,6 +4,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -11,9 +12,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -22,13 +25,19 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.example.alcohol.backup.AutoBackup
+import com.example.alcohol.backup.AutoBackupSettings
+import com.example.alcohol.backup.scheduleAutoBackup
 import com.example.alcohol.data.AppDatabase
 import com.example.alcohol.data.Backup
 import com.example.alcohol.data.BackupCounts
+import java.time.Instant
 import java.time.LocalDateTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -38,6 +47,8 @@ import kotlinx.coroutines.withContext
 private class PendingImport(val json: String, val counts: BackupCounts)
 
 private val FILE_STAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmm")
+private val SAVED_AT_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")
+private const val DAY_MS = 24L * 60 * 60 * 1000
 
 /** Подписи таблиц для счётчиков на экране копии. Порядок — как в [Backup.TABLES]. */
 private val TABLE_LABELS = linkedMapOf(
@@ -71,7 +82,16 @@ fun BackupScreen() {
     var busy by remember { mutableStateOf(false) }
     var pending by remember { mutableStateOf<PendingImport?>(null) }
 
-    LaunchedEffect(Unit) { current = Backup.counts(db) }
+    var autoEnabled by remember { mutableStateOf(AutoBackupSettings.isEnabled(context)) }
+    var autoFolder by remember { mutableStateOf<String?>(null) }
+    var autoLast by remember { mutableStateOf(AutoBackupSettings.lastSavedAt(context)) }
+
+    LaunchedEffect(Unit) {
+        current = Backup.counts(db)
+        autoEnabled = AutoBackupSettings.isEnabled(context)
+        autoFolder = AutoBackupSettings.treeUri(context)?.let { AutoBackup.folderName(context, it) }
+        autoLast = AutoBackupSettings.lastSavedAt(context)
+    }
 
     val saveLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -125,6 +145,38 @@ fun BackupScreen() {
         }
     }
 
+    val folderLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri == null) {
+            autoEnabled = AutoBackupSettings.isEnabled(context)
+            return@rememberLauncherForActivityResult
+        }
+        scope.launch {
+            busy = true
+            error = null
+            status = null
+            try {
+                check(AutoBackupSettings.enable(context, uri)) { "Папка не даёт постоянный доступ" }
+                scheduleAutoBackup(context)
+                AutoBackup.save(context, uri)
+                autoEnabled = true
+                autoFolder = AutoBackup.folderName(context, uri)
+                autoLast = AutoBackupSettings.lastSavedAt(context)
+                status = "Автосохранение включено: копия сохранена."
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                autoEnabled = AutoBackupSettings.isEnabled(context)
+                autoFolder = AutoBackupSettings.treeUri(context)?.let { AutoBackup.folderName(context, it) }
+                autoLast = AutoBackupSettings.lastSavedAt(context)
+                error = "Не удалось включить автосохранение: ${messageOf(e)}"
+            } finally {
+                busy = false
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -156,6 +208,61 @@ fun BackupScreen() {
                 }
             }
         }
+
+        HorizontalDivider()
+
+        Text("Автосохранение", style = MaterialTheme.typography.titleMedium)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Сохранять копию каждый день", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "Файл ${AutoBackup.FILE_NAME} перезаписывается в выбранной папке.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Switch(
+                checked = autoEnabled,
+                enabled = !busy,
+                onCheckedChange = { checked ->
+                    if (checked) {
+                        folderLauncher.launch(null)
+                    } else {
+                        scope.launch {
+                            AutoBackupSettings.disable(context)
+                            autoEnabled = false
+                            autoFolder = null
+                            status = "Автосохранение выключено."
+                        }
+                    }
+                },
+            )
+        }
+        if (autoEnabled) {
+            autoFolder?.let { Text("Папка: $it", style = MaterialTheme.typography.bodySmall) }
+            if (autoLast > 0) {
+                Text(
+                    "Последнее сохранение: ${formatSavedAt(autoLast)}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                if (System.currentTimeMillis() - autoLast > 2 * DAY_MS) {
+                    Text(
+                        "Давно не сохранялось — проверь, что папка доступна.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            } else {
+                Text(
+                    "Ещё не сохранялось: проверь, что папка доступна, или выключи и включи снова.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+
+        HorizontalDivider()
 
         Button(
             onClick = { saveLauncher.launch("moi-napitki-${LocalDateTime.now().format(FILE_STAMP)}.json") },
@@ -224,6 +331,9 @@ private fun describe(counts: BackupCounts): String =
         val n = counts.rows[table] ?: 0
         if (n > 0) "$label — $n" else null
     }.joinToString(" · ").ifEmpty { "данных нет" }
+
+private fun formatSavedAt(millis: Long): String =
+    Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).format(SAVED_AT_FORMAT)
 
 private fun messageOf(e: Exception): String =
     e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
